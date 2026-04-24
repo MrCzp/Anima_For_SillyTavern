@@ -1,0 +1,1 @@
+class Mutex{constructor(){this['_queue']=[],this['_locked']=![];}['lock'](){return new Promise(_0x5e8a7d=>{this['_locked']?this['_queue']['push'](_0x5e8a7d):(this['_locked']=!![],_0x5e8a7d());});}['unlock'](){if(this['_queue']['length']>0x0){const _0x3f5489=this['_queue']['shift']();_0x3f5489();}else this['_locked']=![];}}

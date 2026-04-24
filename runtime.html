@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Anima Runtime</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #000; color: #f5f5f5; font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+
+.runtime {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+/* ── Character area (canvas/poster/placeholder) ── */
+.character-area {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    min-height: 0;
+    overflow: hidden;
+}
+.character-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+#stage_canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+}
+#stage_poster {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    object-position: bottom center;
+    display: none;
+    filter: drop-shadow(0 0 40px rgba(0,0,0,0.5));
+}
+/* ── Loading center (Anima style) ── */
+.loading-center {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding-bottom: 36px;
+    z-index: 5;
+}
+.loading-center.is-hidden { display: none; }
+.loading-avatar {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.2);
+    box-shadow: 0 0 28px rgba(37,99,235,0.28);
+    background: #111;
+}
+.loading-avatar.is-hidden { display: none; }
+.loading-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #f5f5f5;
+}
+.loading-status {
+    font-size: 12px;
+    color: #34d399;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.loading-status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #34d399;
+}
+.loading-mask {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0.28), rgba(0,0,0,0.55));
+    backdrop-filter: blur(2px);
+    z-index: 8;
+    pointer-events: none;
+}
+.loading-mask.is-hidden { display: none; }
+.loading-spinner {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.22);
+    border-top-color: rgba(255,255,255,0.9);
+    animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text {
+    font-size: 12px;
+    color: rgba(255,255,255,0.9);
+    font-weight: 600;
+}
+
+/* ── Speech Bubble (Anima style — white, positioned right) ── */
+.speech-bubble {
+    position: absolute;
+    right: 12px;
+    top: 20%;
+    max-width: 55%;
+    min-width: 80px;
+    border-radius: 16px;
+    background: #ffffff;
+    color: #111;
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.65;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.1);
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 10;
+    pointer-events: none;
+    overflow: visible;
+}
+.speech-bubble.is-visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+.speech-bubble::after {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 20px;
+    width: 0;
+    height: 0;
+    border-top: 8px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-right: 10px solid #fff;
+}
+.bubble-inner {
+    max-height: 160px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.12) transparent;
+}
+.bubble-inner::-webkit-scrollbar { width: 4px; }
+.bubble-inner::-webkit-scrollbar-track { background: transparent; }
+.bubble-inner::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 2px; }
+
+.bubble-name {
+    font-size: 10px;
+    font-weight: 700;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 5px;
+}
+
+/* Typing dots */
+.bubble-dots {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    height: 18px;
+}
+.bubble-dots span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #999;
+    animation: dot-bounce 1s infinite;
+}
+.bubble-dots span:nth-child(2) { animation-delay: 0.15s; }
+.bubble-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dot-bounce {
+    0%, 100% { transform: translateY(0); opacity: 0.5; }
+    50% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* Typewriter cursor */
+.bubble-text-content::after {
+    content: '|';
+    animation: blink-cursor 0.7s step-end infinite;
+    color: #aaa;
+    margin-left: 1px;
+}
+.bubble-text-content.is-done::after { display: none; }
+@keyframes blink-cursor {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+/* ── Interrupt button (floating red circle) ── */
+.interrupt-btn {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: #ef4444;
+    color: #fff;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 12;
+    box-shadow: 0 4px 12px rgba(239,68,68,0.4);
+}
+.interrupt-btn.is-visible {
+    display: flex;
+}
+.interrupt-btn:hover {
+    background: #dc2626;
+    transform: translateX(-50%) scale(1.1);
+    box-shadow: 0 6px 16px rgba(239,68,68,0.6);
+}
+.interrupt-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* ── Chat Bottom ── */
+.chat-bottom {
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+    padding: 10px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 60%, transparent 100%);
+}
+
+/* Mode toggle */
+.mode-toggle {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 100px;
+    background: rgba(255,255,255,0.06);
+}
+.mode-toggle__btn {
+    padding: 5px 14px;
+    border: none;
+    border-radius: 100px;
+    background: transparent;
+    color: #707070;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.mode-toggle__btn.is-active {
+    background: rgba(255,255,255,0.12);
+    color: #f5f5f5;
+}
+
+/* Text mode */
+.text-mode-area {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+}
+.text-input-wrap {
+    flex: 1;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 100px;
+}
+.text-input {
+    width: 100%;
+    padding: 10px 18px;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 13px;
+    font-family: inherit;
+    color: #f5f5f5;
+}
+.text-input::placeholder { color: #555; }
+.send-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: #f5f5f5;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+.send-btn:hover { background: #e0e0e0; transform: scale(1.06); }
+.send-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.send-btn svg { color: #000; }
+
+/* Voice mode */
+.voice-mode-area {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+}
+.voice-bar-wrap {
+    flex: 1;
+    height: 40px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5px;
+    padding: 0 18px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+.voice-bar-wrap.is-listening {
+    border-color: rgba(239,68,68,0.5);
+    background: #1c1214;
+}
+.voice-bar-wrap .voice-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 12px;
+    color: #555;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+.voice-bar-wrap.is-listening .voice-label { opacity: 0; }
+.v-bar {
+    width: 2.5px;
+    border-radius: 100px;
+    background: rgba(255,255,255,0.2);
+    height: 4px;
+    transition: height 0.15s ease, background 0.3s, opacity 0.3s;
+    opacity: 0;
+}
+.voice-bar-wrap.is-listening .v-bar {
+    opacity: 1;
+    background: rgba(255,255,255,0.6);
+    animation: vBarWave 0.6s ease-in-out infinite alternate;
+}
+.voice-bar-wrap.is-listening .v-bar:nth-child(2)  { animation-delay: 0.00s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(3)  { animation-delay: 0.04s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(4)  { animation-delay: 0.08s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(5)  { animation-delay: 0.12s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(6)  { animation-delay: 0.16s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(7)  { animation-delay: 0.20s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(8)  { animation-delay: 0.24s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(9)  { animation-delay: 0.28s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(10) { animation-delay: 0.32s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(11) { animation-delay: 0.36s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(12) { animation-delay: 0.40s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(13) { animation-delay: 0.44s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(14) { animation-delay: 0.48s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(15) { animation-delay: 0.52s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(16) { animation-delay: 0.56s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(17) { animation-delay: 0.60s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(18) { animation-delay: 0.64s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(19) { animation-delay: 0.48s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(20) { animation-delay: 0.36s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(21) { animation-delay: 0.24s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(22) { animation-delay: 0.12s; }
+.voice-bar-wrap.is-listening .v-bar:nth-child(23) { animation-delay: 0.00s; }
+@keyframes vBarWave {
+    0%   { height: 4px; }
+    100% { height: calc(4px + var(--bar-h, 20px)); }
+}
+.mic-btn {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: none;
+    background: #f5f5f5;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s;
+}
+.mic-btn:hover { transform: scale(1.06); }
+.mic-btn.is-recording {
+    background: #ef4444;
+    animation: mic-pulse 1.5s infinite;
+}
+.mic-btn.is-recording svg { stroke: #fff; }
+.mic-btn.is-sending { opacity: 0.5; pointer-events: none; }
+@keyframes mic-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+    70%  { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+}
+
+
+</style>
+</head>
+<body>
+<main class="runtime">
+    <!-- Character display area -->
+    <div class="character-area">
+        <div class="character-inner">
+            <canvas id="stage_canvas"></canvas>
+            <img id="stage_poster" alt="Avatar" />
+        </div>
+        <!-- Loading center (Anima style) -->
+        <div class="loading-center" id="loading_center">
+            <img class="loading-avatar" id="loading_avatar" alt="" />
+            <div class="loading-name" id="loading_name">Avatar</div>
+            <div class="loading-status">Online</div>
+        </div>
+        <div class="loading-mask" id="loading_mask">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading avatar...</div>
+        </div>
+        <!-- Speech bubble (Anima style) -->
+        <div class="speech-bubble" id="speech_bubble">
+            <div class="bubble-inner">
+                <div class="bubble-name" id="bubble_name">AVATAR</div>
+                <div class="bubble-dots" id="bubble_dots" style="display:none">
+                    <span></span><span></span><span></span>
+                </div>
+                <span class="bubble-text-content" id="bubble_text"></span>
+            </div>
+        </div>
+        <!-- Interrupt button -->
+        <button class="interrupt-btn" id="interrupt_btn" title="Stop">
+            <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+    </div>
+
+    <!-- Chat bottom area (hidden during loading) -->
+    <div class="chat-bottom" id="chat_bottom" style="display:none">
+        <!-- Mode toggle -->
+        <div class="mode-toggle" id="mode_toggle">
+            <button class="mode-toggle__btn is-active" id="mode_text_btn" data-mode="text">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                Text
+            </button>
+            <button class="mode-toggle__btn" id="mode_voice_btn" data-mode="voice">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                </svg>
+                Voice
+            </button>
+        </div>
+        <!-- Text mode input -->
+        <div class="text-mode-area" id="text_mode_area">
+            <div class="text-input-wrap">
+                <input type="text" id="chat_input" class="text-input" placeholder="Type a message..." autocomplete="off" />
+            </div>
+            <button id="chat_send_btn" class="send-btn" title="Send">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+            </button>
+        </div>
+        <!-- Voice mode input -->
+        <div class="voice-mode-area" id="voice_mode_area" style="display:none">
+            <div class="voice-bar-wrap" id="voice_bar">
+                <span class="voice-label">Tap mic to speak</span>
+                <div class="v-bar" style="--bar-h:8px"></div><div class="v-bar" style="--bar-h:14px"></div>
+                <div class="v-bar" style="--bar-h:20px"></div><div class="v-bar" style="--bar-h:12px"></div>
+                <div class="v-bar" style="--bar-h:24px"></div><div class="v-bar" style="--bar-h:16px"></div>
+                <div class="v-bar" style="--bar-h:28px"></div><div class="v-bar" style="--bar-h:18px"></div>
+                <div class="v-bar" style="--bar-h:22px"></div><div class="v-bar" style="--bar-h:10px"></div>
+                <div class="v-bar" style="--bar-h:26px"></div><div class="v-bar" style="--bar-h:14px"></div>
+                <div class="v-bar" style="--bar-h:30px"></div><div class="v-bar" style="--bar-h:16px"></div>
+                <div class="v-bar" style="--bar-h:22px"></div><div class="v-bar" style="--bar-h:12px"></div>
+                <div class="v-bar" style="--bar-h:26px"></div><div class="v-bar" style="--bar-h:20px"></div>
+                <div class="v-bar" style="--bar-h:14px"></div><div class="v-bar" style="--bar-h:24px"></div>
+                <div class="v-bar" style="--bar-h:10px"></div><div class="v-bar" style="--bar-h:18px"></div>
+            </div>
+            <button id="chat_mic_btn" class="mic-btn" title="Voice input">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                </svg>
+            </button>
+        </div>
+    </div>
+</main>
+
+<script type="module">
+import AvatarJS from './runtime-avatar.js';
+import { atfDt, ttsTransform, asrBase64 } from './runtime-api.js';
+
+// ──── State ────
+let latestPayload = null;
+let renderer = null;
+let rendererModelUrl = '';
+let lastBindingKey = '';
+let lastAutoReplyEventId = 0;
+let lastBusyState = false;
+let avatarName = 'Avatar';
+let isBroadcasting = false;
+
+// Active lip-sync tracking
+let activeLipSyncAbort = null;
+let activeLipSyncTimer = null;
+
+// Acknowledgment tracking
+let ackAbort = null;
+let ackTimer = null;
+let isAckPlaying = false;
+
+// Audio playback
+let currentAudio = null;
+
+// Typewriter state
+let typewriterTimer = null;
+
+// Chat mode
+let chatMode = 'text'; // 'text' | 'voice'
+
+// ──── Acknowledgment phrases ────
+const ACK_PHRASES = [
+    '让我想想…',
+    '嗯…',
+    '稍等一下…',
+    '我想一下…',
+    '好的，让我思考一下…',
+    'Let me think…',
+    'Hmm…',
+    'One moment…',
+    'Let me see…',
+];
+
+// ──── Helpers ────
+function $(id) { return document.getElementById(id); }
+
+function setStatus(text, busy = false) {
+    try {
+        window.parent.postMessage({ type: 'anima-runtime-report', status: text }, '*');
+    } catch { /* sandboxed */ }
+}
+
+function updateInterruptBtn() {
+    $('interrupt_btn').classList.toggle('is-visible', isBroadcasting);
+}
+
+function setBroadcasting(val) {
+    isBroadcasting = val;
+    updateInterruptBtn();
+}
+
+function setAvatarName(name) {
+    avatarName = name || 'Avatar';
+    $('bubble_name').textContent = avatarName.toUpperCase();
+}
+
+// ──── Loading state ────
+let isLoading = true;
+
+function enterLoadingState(posterUrl, name) {
+    isLoading = true;
+    // Show loading center with avatar info
+    const avatar = $('loading_avatar');
+    if (posterUrl) {
+        avatar.src = posterUrl;
+        avatar.classList.remove('is-hidden');
+    } else {
+        avatar.classList.add('is-hidden');
+    }
+    $('loading_name').textContent = name || avatarName || 'Avatar';
+    $('loading_center').classList.remove('is-hidden');
+    $('loading_mask').classList.remove('is-hidden');
+    // Hide chat UI
+    $('chat_bottom').style.display = 'none';
+    $('speech_bubble').classList.remove('is-visible');
+    $('interrupt_btn').classList.remove('is-visible');
+}
+
+function exitLoadingState() {
+    isLoading = false;
+    $('loading_center').classList.add('is-hidden');
+    $('loading_mask').classList.add('is-hidden');
+    // Show chat UI
+    $('chat_bottom').style.display = '';
+}
+
+function showCanvas() {
+    $('stage_canvas').style.display = 'block';
+    $('stage_poster').style.display = 'none';
+    exitLoadingState();
+}
+
+function showPoster(url) {
+    if (renderer) return;
+    const poster = $('stage_poster');
+    poster.src = url;
+    poster.style.display = '';
+    $('stage_canvas').style.display = 'none';
+    exitLoadingState();
+}
+
+function showPlaceholder() {
+    if (renderer) return;
+    $('stage_canvas').style.display = 'none';
+    $('stage_poster').style.display = 'none';
+    // Stay in loading state — the loading center is already visible
+}
+
+// ──── Speech Bubble + Typewriter ────
+
+function showBubble() {
+    // Hidden for now
+    return;
+}
+
+function hideBubble() {
+    $('speech_bubble').classList.remove('is-visible');
+}
+
+function showDots() {
+    $('bubble_text').style.display = 'none';
+    $('bubble_dots').style.display = '';
+    showBubble();
+}
+
+function hideDots() {
+    $('bubble_dots').style.display = 'none';
+    $('bubble_text').style.display = '';
+}
+
+/**
+ * @param {string} text
+ * @param {number} durationMs — total time to reveal all characters
+ */
+function startTypewriter(text, durationMs) {
+    stopTypewriter(false);
+    hideDots();
+    const el = $('bubble_text');
+    el.textContent = '';
+    el.classList.remove('is-done');
+    showBubble();
+
+    const chars = [...text];
+    const total = chars.length;
+    if (total === 0) return;
+    const interval = Math.max(durationMs / total, 25);
+    let idx = 0;
+
+    typewriterTimer = setInterval(() => {
+        if (idx < total) {
+            el.textContent += chars[idx];
+            idx++;
+        } else {
+            stopTypewriter(true);
+        }
+    }, interval);
+}
+
+function stopTypewriter(applyFull) {
+    if (typewriterTimer) {
+        clearInterval(typewriterTimer);
+        typewriterTimer = null;
+    }
+    if (applyFull) {
+        $('bubble_text').classList.add('is-done');
+    }
+}
+
+function clearBubble() {
+    stopTypewriter(false);
+    hideBubble();
+    $('bubble_text').textContent = '';
+    $('bubble_text').classList.remove('is-done');
+}
+
+// ──── Interrupt (stop playing) ────
+
+function stopPlaying() {
+    stopTypewriter(true);
+    cancelAcknowledgment();
+    cancelLipSync();
+    stopAudio();
+    if (renderer) renderer.stopPlay();
+    setBroadcasting(false);
+    setStatus('Idle');
+    // Also tell parent to stop generation if in progress
+    try {
+        window.parent.postMessage({ type: 'anima-runtime-command', command: 'interrupt' }, '*');
+    } catch { /* sandboxed */ }
+}
+
+// ──── Renderer lifecycle ────
+function ensureRenderer(binding) {
+    const modelUrl = binding?.modelUrl || '';
+    if (!modelUrl) {
+        destroyRenderer();
+        if (binding?.posterUrl) {
+            showPoster(binding.posterUrl);
+            setStatus('Poster mode (no 3D model)');
+        } else {
+            // No model, no poster — stay in loading / show poster-less state
+            enterLoadingState(null, binding?.avatarName || avatarName);
+            setStatus('No model');
+        }
+        return;
+    }
+
+    if (renderer && rendererModelUrl === modelUrl) return;
+    destroyRenderer();
+    rendererModelUrl = modelUrl;
+
+    enterLoadingState(binding?.posterUrl, binding?.avatarName || avatarName);
+    setStatus('Loading 3D model...', true);
+    const canvas = $('stage_canvas');
+    const CANVAS_W = 768;
+    const CANVAS_H = 1024;
+
+    renderer = new AvatarJS(
+        { canvas, canvasWidth: CANVAS_W, canvasHeight: CANVAS_H },
+        () => { showCanvas(); setStatus('Model loaded'); },
+        () => { /* onAnimationReady */ },
+        () => { setStatus('Idle'); stopAudio(); setBroadcasting(false); },
+        (err) => {
+            console.warn('[Anima Runtime] AvatarJS error:', err);
+            setStatus('Renderer error');
+            if (!renderer) {
+                if (binding?.posterUrl) showPoster(binding.posterUrl);
+            }
+        },
+        modelUrl,
+    );
+}
+
+function destroyRenderer() {
+    if (renderer) { renderer.close(); renderer = null; }
+    rendererModelUrl = '';
+    try {
+        const canvas = $('stage_canvas');
+        if (canvas && canvas.parentNode) {
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = canvas.id;
+            newCanvas.style.cssText = canvas.style.cssText;
+            canvas.parentNode.replaceChild(newCanvas, canvas);
+        }
+    } catch { /* ignore */ }
+}
+
+function fullCleanup() {
+    cancelLipSync();
+    cancelAcknowledgment();
+    clearBubble();
+    stopAudio();
+    destroyRenderer();
+    setBroadcasting(false);
+    latestPayload = null;
+    rendererModelUrl = '';
+    lastBindingKey = '';
+    lastAutoReplyEventId = 0;
+    lastBusyState = false;
+    $('stage_canvas').style.display = 'none';
+    $('stage_poster').style.display = 'none';
+    enterLoadingState(null, 'Avatar');
+    setStatus('Runtime ready');
+}
+
+// ──── Audio format conversion ────
+
+/** Shared AudioContext for decoding audio data. */
+let _sharedAudioCtx = null;
+function getAudioCtx() {
+    if (!_sharedAudioCtx) _sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return _sharedAudioCtx;
+}
+
+/**
+ * Convert any browser-decodable audio (MP3, Opus, etc.) to 16-bit PCM WAV base64.
+ * The atfDt API only accepts WAV.
+ * @param {string} rawBase64 raw base64 audio (no data: prefix)
+ * @param {string} [mimeType] original MIME type (for data-URI construction)
+ * @returns {Promise<string>} WAV audio as raw base64 (no data: prefix)
+ */
+async function convertToWavBase64(rawBase64, mimeType) {
+    const audioBuffer = await decodeBase64ToAudioBuffer(rawBase64);
+    return audioBufferToWavBase64(audioBuffer);
+}
+
+/**
+ * Decode raw base64 audio into an AudioBuffer.
+ * @param {string} rawBase64
+ * @returns {Promise<AudioBuffer>}
+ */
+async function decodeBase64ToAudioBuffer(rawBase64) {
+    const binaryStr = atob(rawBase64);
+    const len = binaryStr.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
+    const audioCtx = getAudioCtx();
+    return audioCtx.decodeAudioData(bytes.buffer.slice(0));
+}
+
+/**
+ * Encode an AudioBuffer (or a slice of it) into 16-bit PCM WAV base64.
+ * @param {AudioBuffer} audioBuffer
+ * @param {number} [startFrame=0] first frame (inclusive)
+ * @param {number} [endFrame] last frame (exclusive), defaults to audioBuffer.length
+ * @returns {string} raw base64 WAV
+ */
+function audioBufferToWavBase64(audioBuffer, startFrame = 0, endFrame) {
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const bitsPerSample = 16;
+    const bytesPerSample = bitsPerSample / 8;
+    const end = endFrame ?? audioBuffer.length;
+    const numFrames = end - startFrame;
+    const dataSize = numFrames * numChannels * bytesPerSample;
+
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeStr = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+    view.setUint16(32, numChannels * bytesPerSample, true);
+    view.setUint16(34, bitsPerSample, true);
+    writeStr(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    const channels = [];
+    for (let ch = 0; ch < numChannels; ch++) channels.push(audioBuffer.getChannelData(ch));
+
+    let offset = 44;
+    for (let i = startFrame; i < end; i++) {
+        for (let ch = 0; ch < numChannels; ch++) {
+            const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+            offset += 2;
+        }
+    }
+
+    const wavBytes = new Uint8Array(buffer);
+    let wavBinary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < wavBytes.length; i += chunkSize) {
+        wavBinary += String.fromCharCode.apply(null, wavBytes.subarray(i, i + chunkSize));
+    }
+    return btoa(wavBinary);
+}
+
+/** Maximum chunk duration in seconds for atfDt (API limit is 60s, use 50s for safety). */
+const ATF_MAX_CHUNK_SECS = 50;
+
+/**
+ * Convert audio to WAV and split into chunks if longer than ATF_MAX_CHUNK_SECS.
+ * @param {string} rawBase64
+ * @param {string} [mimeType]
+ * @returns {Promise<{ wavChunks: string[], totalDurationMs: number }>}
+ */
+async function convertAndSplitWav(rawBase64, mimeType) {
+    const audioBuffer = await decodeBase64ToAudioBuffer(rawBase64);
+    const totalDurationMs = (audioBuffer.length / audioBuffer.sampleRate) * 1000;
+    const maxFrames = ATF_MAX_CHUNK_SECS * audioBuffer.sampleRate;
+
+    if (audioBuffer.length <= maxFrames) {
+        return { wavChunks: [audioBufferToWavBase64(audioBuffer)], totalDurationMs };
+    }
+
+    // Split into chunks
+    const wavChunks = [];
+    for (let start = 0; start < audioBuffer.length; start += maxFrames) {
+        const end = Math.min(start + maxFrames, audioBuffer.length);
+        wavChunks.push(audioBufferToWavBase64(audioBuffer, start, end));
+    }
+    console.info(`[Anima Runtime] Split audio into ${wavChunks.length} chunks (total ${(totalDurationMs / 1000).toFixed(1)}s)`);
+    return { wavChunks, totalDurationMs };
+}
+
+// ──── Audio playback ────
+function playAudioBase64(base64, mimeType) {
+    stopAudio();
+    if (!base64) return null;
+    const audio = new Audio();
+    const mime = mimeType || 'audio/mp3';
+    audio.src = base64.startsWith('data:') ? base64 : `data:${mime};base64,${base64}`;
+    console.info('[Anima Runtime] playAudioBase64 called, mime:', mime, 'b64 len:', base64?.length);
+    audio.play().catch(e => console.warn('[Anima Runtime] Audio play failed:', e));
+    currentAudio = audio;
+    return audio;
+}
+
+function stopAudio() {
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+    }
+}
+
+// ──── Lip-sync pipeline ────
+async function runLipSync(text, manual = false) {
+    console.info('[Anima Runtime] runLipSync called, manual:', manual, 'text:', text?.slice(0, 50));
+    const payload = latestPayload;
+    if (!payload) return;
+    const config = payload.config;
+    const binding = payload.binding;
+    const voiceId = binding?.voiceId || config?.defaultVoiceId || '1';
+    const modelId = binding?.modelId || binding?.remoteAvatarId || '';
+
+    if (!text || !modelId) {
+        setStatus('Missing text or model ID for lip-sync');
+        return;
+    }
+
+    cancelAcknowledgment();
+    cancelLipSync();
+
+    const abort = new AbortController();
+    activeLipSyncAbort = abort;
+    const requestId = Date.now();
+
+    try {
+        setStatus('TTS processing...', true);
+        setBroadcasting(true);
+
+        const ttsResult = await ttsTransform(text, voiceId, config, { signal: abort.signal });
+        if (abort.signal.aborted) return;
+
+        const audioBase64 = ttsResult?.data?.audioBase64 || '';
+        const audioLen = ttsResult?.data?.audioLen || 0;
+
+        if (!audioBase64) {
+            setStatus('TTS returned no audio');
+            setBroadcasting(false);
+            return;
+        }
+
+        setStatus('Generating lip-sync...', true);
+        const traceId = `ls-${requestId}`;
+        const atfResult = await atfDt(audioBase64, modelId, traceId, config, { signal: abort.signal });
+        if (abort.signal.aborted) return;
+
+        const atfData = atfResult?.data;
+        if (!atfData?.AK) {
+            setStatus('Playing audio (no animation)', true);
+            const durationMs = (audioLen || 5) * 1000;
+            startTypewriter(text, durationMs);
+
+            activeLipSyncTimer = setTimeout(() => {
+                stopAudio();
+                stopTypewriter(true);
+                setBroadcasting(false);
+                setStatus('Idle');
+                setTimeout(() => { if (!isAckPlaying) hideBubble(); }, 2500);
+            }, durationMs + 800);
+            return;
+        }
+
+        setStatus('Speaking', true);
+        const durationMs = (audioLen || 5) * 1000;
+        startTypewriter(text, durationMs);
+
+        if (renderer) {
+            renderer.receiveData(atfData, false, () => renderer.startPlay2());
+        }
+
+        const stopMs = durationMs + 800;
+        activeLipSyncTimer = setTimeout(() => {
+            if (renderer) renderer.stopPlay();
+            stopAudio();
+            stopTypewriter(true);
+            setBroadcasting(false);
+            setStatus('Idle');
+            setTimeout(() => { if (!isAckPlaying) hideBubble(); }, 2500);
+        }, stopMs);
+
+    } catch (error) {
+        if (abort.signal.aborted) return;
+        console.error('[Anima Runtime] Lip-sync error:', error);
+        setStatus('Lip-sync error: ' + (error?.message || error));
+        setBroadcasting(false);
+    }
+}
+
+function cancelLipSync() {
+    if (activeLipSyncAbort) { activeLipSyncAbort.abort(); activeLipSyncAbort = null; }
+    if (activeLipSyncTimer) { clearTimeout(activeLipSyncTimer); activeLipSyncTimer = null; }
+    if (renderer) renderer.stopPlay();
+    stopAudio();
+    clearBubble();
+    setBroadcasting(false);
+    // Notify parent so externalTtsProcessing resets and the queue can continue
+    notifyTtsDone();
+}
+
+// ──── External TTS lip-sync (audio from ST TTS extension) ────
+
+/**
+ * Play external audio (from ST TTS) through the avatar with atfDt lip-sync.
+ * Skips Anima's ttsTransform — uses the pre-generated audio directly.
+ * When done, posts 'anima-runtime-tts-done' to parent so the queue advances.
+ * @param {string} audioBase64 raw base64 audio (no data: prefix)
+ * @param {string} text display text for typewriter
+ */
+async function runExternalTtsLipSync(audioBase64, text, mimeType) {
+    const payload = latestPayload;
+    console.info('[Anima Runtime] runExternalTtsLipSync:', { hasPayload: !!payload, b64Len: audioBase64?.length, hasConfig: !!payload?.config, apiBase: payload?.config?.apiBaseUrl?.slice(0, 30) });
+    if (!payload || !audioBase64) {
+        console.warn('[Anima Runtime] No payload or audioBase64, aborting');
+        notifyTtsDone();
+        return;
+    }
+    const config = payload.config;
+    const binding = payload.binding;
+    const modelId = binding?.modelId || binding?.remoteAvatarId || '';
+    console.info('[Anima Runtime] modelId:', modelId, 'voiceId:', binding?.voiceId);
+
+    cancelAcknowledgment();
+    cancelLipSync();
+
+    if (!modelId) {
+        // No model — just play audio without animation
+        const audio = playAudioBase64(audioBase64, mimeType);
+        setBroadcasting(true);
+        setStatus('Speaking (no model)', true);
+        if (audio) {
+            audio.addEventListener('ended', () => {
+                setBroadcasting(false);
+                setStatus('Idle');
+                notifyTtsDone();
+            }, { once: true });
+            audio.addEventListener('error', () => {
+                setBroadcasting(false);
+                setStatus('Idle');
+                notifyTtsDone();
+            }, { once: true });
+        } else {
+            notifyTtsDone();
+        }
+        return;
+    }
+
+    const abort = new AbortController();
+    activeLipSyncAbort = abort;
+
+    try {
+        setBroadcasting(true);
+        setStatus('Converting audio...', true);
+
+        // Convert to WAV and split into ≤50s chunks (atfDt limit is 60s)
+        let wavChunks, totalDurationMs;
+        const needConvert = !mimeType || (mimeType !== 'audio/wav' && mimeType !== 'audio/wave' && mimeType !== 'audio/x-wav');
+        try {
+            if (needConvert) {
+                ({ wavChunks, totalDurationMs } = await convertAndSplitWav(audioBase64, mimeType));
+                console.info('[Anima Runtime] WAV chunks:', wavChunks.length, 'total duration:', (totalDurationMs / 1000).toFixed(1) + 's');
+            } else {
+                wavChunks = [audioBase64];
+                totalDurationMs = 5000; // fallback
+            }
+        } catch (convErr) {
+            console.error('[Anima Runtime] WAV conversion failed:', convErr);
+            wavChunks = [audioBase64];
+            totalDurationMs = 5000;
+        }
+
+        if (abort.signal.aborted) { notifyTtsDone(); return; }
+
+        if (text) startTypewriter(text, totalDurationMs);
+
+        // ── Pipeline: prefetch next chunk's atfDt while current chunk plays ──
+        // This eliminates the gap between segments.
+
+        /** Parse WAV header to get chunk duration in ms. */
+        const wavDurationMs = (wavB64) => {
+            try {
+                const hdr = atob(wavB64.slice(0, 80));
+                const sr = hdr.charCodeAt(24) | (hdr.charCodeAt(25) << 8) | (hdr.charCodeAt(26) << 16) | (hdr.charCodeAt(27) << 24);
+                const ds = hdr.charCodeAt(40) | (hdr.charCodeAt(41) << 8) | (hdr.charCodeAt(42) << 16) | (hdr.charCodeAt(43) << 24);
+                const nc = hdr.charCodeAt(22) | (hdr.charCodeAt(23) << 8);
+                if (sr > 0 && nc > 0) return (ds / (sr * nc * 2)) * 1000;
+            } catch { /* fallback */ }
+            return ATF_MAX_CHUNK_SECS * 1000;
+        };
+
+        // Kick off first atfDt call
+        setStatus(`Generating lip-sync${wavChunks.length > 1 ? ' (1/' + wavChunks.length + ')' : ''}...`, true);
+        let pendingAtf = atfDt(wavChunks[0], modelId, `ls-ext-${Date.now()}-0`, config, { signal: abort.signal });
+
+        for (let i = 0; i < wavChunks.length; i++) {
+            if (abort.signal.aborted) { notifyTtsDone(); return; }
+
+            // Await the current chunk's atfDt (already in-flight)
+            const atfResult = await pendingAtf;
+            if (abort.signal.aborted) { notifyTtsDone(); return; }
+            console.info('[Anima Runtime] atfDt chunk', i + 1, '/', wavChunks.length, 'ready');
+
+            const atfData = atfResult?.data;
+            const chunkDurationMs = wavDurationMs(wavChunks[i]);
+
+            // Start prefetching next chunk BEFORE playing current one
+            if (i + 1 < wavChunks.length) {
+                setStatus(`Generating lip-sync (${i + 2}/${wavChunks.length})...`, true);
+                pendingAtf = atfDt(wavChunks[i + 1], modelId, `ls-ext-${Date.now()}-${i + 1}`, config, { signal: abort.signal });
+            }
+
+            // Play current chunk's animation
+            if (atfData?.AK && renderer) {
+                setStatus('Speaking', true);
+                renderer.receiveData(atfData, false, () => renderer.startPlay2());
+            } else {
+                setStatus('Speaking (no animation)', true);
+            }
+
+            // Wait for current chunk to finish before starting next
+            if (i < wavChunks.length - 1) {
+                await new Promise((resolve) => {
+                    const timer = setTimeout(resolve, chunkDurationMs);
+                    const onAbort = () => { clearTimeout(timer); resolve(undefined); };
+                    abort.signal.addEventListener('abort', onAbort, { once: true });
+                });
+            } else {
+                // Last chunk — set cleanup timer
+                const cleanup = () => {
+                    if (activeLipSyncTimer) { clearTimeout(activeLipSyncTimer); activeLipSyncTimer = null; }
+                    if (renderer) renderer.stopPlay();
+                    stopTypewriter(true);
+                    setBroadcasting(false);
+                    setStatus('Idle');
+                    setTimeout(() => { if (!isAckPlaying) hideBubble(); }, 2500);
+                    notifyTtsDone();
+                };
+                activeLipSyncTimer = setTimeout(cleanup, chunkDurationMs + 800);
+            }
+        }
+
+    } catch (error) {
+        if (abort.signal.aborted) { notifyTtsDone(); return; }
+        console.error('[Anima Runtime] External TTS lip-sync error:', error);
+        setStatus('Lip-sync error: ' + (error?.message || error));
+        setBroadcasting(false);
+        notifyTtsDone();
+    }
+}
+
+/** Notify parent that the current external TTS chunk finished. */
+function notifyTtsDone() {
+    try {
+        window.parent.postMessage({ type: 'anima-runtime-tts-done' }, '*');
+    } catch { /* sandboxed */ }
+}
+
+// ──── Acknowledgment system ────
+
+async function playAcknowledgment() {
+    const payload = latestPayload;
+    if (!payload) return;
+    const config = payload.config;
+    const binding = payload.binding;
+    const voiceId = binding?.voiceId || config?.defaultVoiceId || '1';
+    const modelId = binding?.modelId || binding?.remoteAvatarId || '';
+
+    if (!modelId) return;
+
+    cancelAcknowledgment();
+    isAckPlaying = true;
+    setBroadcasting(true);
+
+    const phrase = ACK_PHRASES[Math.floor(Math.random() * ACK_PHRASES.length)];
+    showDots();
+
+    const abort = new AbortController();
+    ackAbort = abort;
+
+    try {
+        await new Promise(r => setTimeout(r, 400));
+        if (abort.signal.aborted) return;
+
+        setStatus('Thinking...', true);
+
+        const ttsResult = await ttsTransform(phrase, voiceId, config, { signal: abort.signal });
+        if (abort.signal.aborted) return;
+
+        const audioBase64 = ttsResult?.data?.audioBase64 || '';
+        const audioLen = ttsResult?.data?.audioLen || 0;
+
+        if (!audioBase64 || abort.signal.aborted) {
+            isAckPlaying = false;
+            return;
+        }
+
+        const traceId = `ack-${Date.now()}`;
+        const atfResult = await atfDt(audioBase64, modelId, traceId, config, { signal: abort.signal });
+        if (abort.signal.aborted) return;
+
+        const atfData = atfResult?.data;
+
+        hideDots();
+        const durationMs = (audioLen || 2) * 1000;
+        startTypewriter(phrase, durationMs);
+
+        if (atfData?.AK && renderer) {
+            renderer.receiveData(atfData, false, () => renderer.startPlay2());
+        }
+
+        ackTimer = setTimeout(() => {
+            if (renderer) renderer.stopPlay();
+            stopAudio();
+            stopTypewriter(true);
+            isAckPlaying = false;
+            showDots();
+            setStatus('Waiting for reply...', true);
+        }, durationMs + 300);
+
+    } catch (error) {
+        if (abort.signal.aborted) return;
+        console.warn('[Anima Runtime] Acknowledgment error:', error);
+        isAckPlaying = false;
+        clearBubble();
+        setBroadcasting(false);
+    }
+}
+
+function cancelAcknowledgment() {
+    if (ackAbort) { ackAbort.abort(); ackAbort = null; }
+    if (ackTimer) { clearTimeout(ackTimer); ackTimer = null; }
+    stopAudio();
+    if (renderer) renderer.stopPlay();
+    isAckPlaying = false;
+}
+
+// ──── Auto lip-sync on new replies ────
+
+function maybeAutoLipSync(payload) {
+    if (!payload?.config?.autoLipSync) return;
+    const rid = payload?.status?.replyEventId || 0;
+    if (rid <= lastAutoReplyEventId) return;
+    lastAutoReplyEventId = rid;
+
+    const msgs = payload?.conversation?.messages || [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i]?.role === 'assistant' && msgs[i]?.text) {
+            const text = msgs[i].text.slice(0, 2000);
+            void runLipSync(text);
+            return;
+        }
+    }
+}
+
+function maybeAcknowledge(payload) {
+    const nowBusy = Boolean(payload?.status?.isBusy);
+    lastBusyState = nowBusy;
+    return;
+}
+
+// ──── Master payload handler ────
+
+function applyPayload(payload) {
+    latestPayload = payload;
+    const binding = payload?.binding;
+    const bk = binding?.key || '';
+
+    // Update avatar name for bubble
+    if (binding?.avatarName) {
+        setAvatarName(binding.avatarName);
+    }
+
+    // Update loading screen if still loading
+    if (isLoading && binding) {
+        if (binding.posterUrl) {
+            const av = $('loading_avatar');
+            av.src = binding.posterUrl;
+            av.classList.remove('is-hidden');
+        }
+        $('loading_name').textContent = binding.avatarName || avatarName || 'Avatar';
+    }
+
+    // Reset on binding change
+    if (bk !== lastBindingKey) {
+        lastBindingKey = bk;
+        lastAutoReplyEventId = 0;
+        lastBusyState = false;
+        cancelLipSync();
+        cancelAcknowledgment();
+        clearBubble();
+    }
+
+    ensureRenderer(binding);
+    maybeAcknowledge(payload);
+    maybeAutoLipSync(payload);
+}
+
+// ──── PostMessage bridge ────
+
+window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+
+    if (data.type === 'anima-runtime-update') {
+        applyPayload(data);
+        return;
+    }
+
+    if (data.type === 'anima-runtime-control') {
+        if (data.command === 'destroy') {
+            fullCleanup();
+            return;
+        }
+        if (data.command === 'lipsync') {
+            const msgs = latestPayload?.conversation?.messages || [];
+            for (let i = msgs.length - 1; i >= 0; i--) {
+                if (msgs[i]?.role === 'assistant' && msgs[i]?.text) {
+                    void runLipSync(msgs[i].text.slice(0, 2000), true);
+                    return;
+                }
+            }
+        }
+        if (data.command === 'external-tts') {
+            console.info('[Anima Runtime] Received external-tts command, b64Len:', data.audioBase64?.length, 'text:', data.text?.slice(0, 50), 'mime:', data.mimeType);
+            void runExternalTtsLipSync(data.audioBase64, data.text, data.mimeType);
+            return;
+        }
+    }
+});
+
+// ──── Mode Toggle ────
+
+function setMode(mode) {
+    chatMode = mode;
+    $('mode_text_btn').classList.toggle('is-active', mode === 'text');
+    $('mode_voice_btn').classList.toggle('is-active', mode === 'voice');
+    $('text_mode_area').style.display = mode === 'text' ? '' : 'none';
+    $('voice_mode_area').style.display = mode === 'voice' ? '' : 'none';
+}
+
+$('mode_text_btn').addEventListener('click', () => setMode('text'));
+$('mode_voice_btn').addEventListener('click', () => setMode('voice'));
+
+// ──── Interrupt button ────
+$('interrupt_btn').addEventListener('click', () => {
+    stopPlaying();
+});
+
+// ──── Chat: Text Mode ────
+
+function sendChatText(text) {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return;
+    $('chat_input').value = '';
+    try {
+        window.parent.postMessage({ type: 'anima-runtime-command', command: 'chat-send', text: trimmed }, '*');
+    } catch { /* sandboxed */ }
+}
+
+$('chat_send_btn').addEventListener('click', () => {
+    sendChatText($('chat_input').value);
+});
+
+$('chat_input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatText($('chat_input').value);
+    }
+});
+
+// ──── Chat: Voice Mode ────
+
+let isRecording = false;
+let mediaRecorder = null;
+let recordedChunks = [];
+
+$('chat_mic_btn').addEventListener('click', async () => {
+    if (isRecording) {
+        stopRecording();
+        return;
+    }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(stream, { mimeType: getSupportedMime() });
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            if (recordedChunks.length === 0) return;
+            const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+            recordedChunks = [];
+            await processVoiceBlob(blob);
+        };
+        mediaRecorder.start();
+        isRecording = true;
+        $('chat_mic_btn').classList.add('is-recording');
+        $('voice_bar').classList.add('is-listening');
+        $('chat_mic_btn').title = 'Stop recording';
+        setStatus('Recording...', true);
+    } catch (err) {
+        console.warn('[Anima Runtime] Mic access failed:', err);
+        setStatus('Microphone access denied');
+    }
+});
+
+function getSupportedMime() {
+    for (const mime of ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']) {
+        if (MediaRecorder.isTypeSupported(mime)) return mime;
+    }
+    return '';
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    isRecording = false;
+    $('chat_mic_btn').classList.remove('is-recording');
+    $('voice_bar').classList.remove('is-listening');
+    $('chat_mic_btn').title = 'Voice input';
+}
+
+async function processVoiceBlob(blob) {
+    const config = latestPayload?.config;
+    if (!config?.authToken) {
+        setStatus('Not logged in — cannot use voice');
+        return;
+    }
+
+    setStatus('Recognizing speech...', true);
+    $('chat_mic_btn').classList.add('is-sending');
+
+    try {
+        const rawBase64 = await blobToBase64Raw(blob);
+        const result = await asrBase64(rawBase64, config);
+        const text = result?.data?.text || '';
+        if (text) {
+            $('chat_input').value = text;
+            sendChatText(text);
+        } else {
+            setStatus('No speech detected');
+        }
+    } catch (err) {
+        console.warn('[Anima Runtime] ASR error:', err);
+        setStatus('Speech recognition failed');
+    } finally {
+        $('chat_mic_btn').classList.remove('is-sending');
+    }
+}
+
+function blobToBase64Raw(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const dataUrl = /** @type {string} */ (reader.result);
+            const base64 = dataUrl.split(',')[1] || '';
+            resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+setStatus('Runtime ready');
+</script>
+</body>
+</html>

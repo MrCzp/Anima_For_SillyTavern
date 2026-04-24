@@ -1,0 +1,171 @@
+<div id="anima_panel" class="anima-panel">
+    <!-- ========== Draggable Title Bar ========== -->
+    <div class="anima-panel__titlebar" id="anima_titlebar">
+        <span class="anima-panel__titlebar-label"><img class="anima-logo-icon" src="" alt="Anima" /> Anima</span>
+        <div class="anima-panel__titlebar-actions">
+            <button id="anima_lang_toggle" class="anima-btn anima-btn--lang" title="Switch language">中文</button>
+            <button id="anima_settings_button" class="anima-btn anima-btn--icon" title="Settings"><i class="fa-solid fa-gear"></i></button>
+            <button id="anima_close_button" class="anima-btn anima-btn--icon" data-i18n-title="common.close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+    </div>
+
+    <!-- ========== VIEW: Login ========== -->
+    <div class="anima-view" id="anima_view_login">
+        <div class="anima-view__center">
+            <div class="anima-login">
+                <div class="anima-login__logo"><img class="anima-logo-login" src="" alt="Anima" /></div>
+                <h2 class="anima-login__title" data-i18n="login.title">Sign in to Anima</h2>
+                <p class="anima-login__subtitle" data-i18n="login.subtitle">Enter your email and password to continue</p>
+                <div class="anima-login__field">
+                    <label for="anima_login_email" data-i18n="login.email">Email</label>
+                    <input type="email" id="anima_login_email" data-i18n-placeholder="login.emailPlaceholder" placeholder="you@example.com" autocomplete="email" />
+                </div>
+                <div class="anima-login__field">
+                    <label for="anima_login_password" data-i18n="login.password">Password</label>
+                    <input type="password" id="anima_login_password" data-i18n-placeholder="login.passwordPlaceholder" placeholder="Password" autocomplete="current-password" />
+                </div>
+                <div id="anima_login_status" class="anima-login__status"></div>
+                <button id="anima_login_submit" class="anima-btn anima-btn--primary anima-btn--wide" data-i18n="login.submit">登录/注册</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== VIEW: Avatar Select ========== -->
+    <div class="anima-view" id="anima_view_avatars" style="display:none">
+        <div class="anima-avatars__header">
+            <div class="anima-avatars__tabs">
+                <button class="anima-tab anima-tab--active" data-tab="all" data-i18n="avatars.tabAll">All</button>
+                <button class="anima-tab" data-tab="official" data-i18n="avatars.tabOfficial">Official</button>
+                <button class="anima-tab" data-tab="my" data-i18n="avatars.tabMy">My Avatars</button>
+            </div>
+            <div class="anima-avatars__actions">
+                <button id="anima_avatar_create_btn" class="anima-btn anima-btn--primary anima-btn--sm" data-i18n-title="avatars.create"><i class="fa-solid fa-plus"></i> <span data-i18n="avatars.create">Create</span></button>
+                <button id="anima_avatar_refresh_btn" class="anima-btn anima-btn--sm" title="Refresh"><i class="fa-solid fa-rotate-right"></i></button>
+                <button id="anima_avatar_logout_btn" class="anima-btn anima-btn--sm" data-i18n-title="login.loggedOut"><i class="fa-solid fa-right-from-bracket"></i></button>
+            </div>
+        </div>
+        <div id="anima_avatars_grid" class="anima-avatars__grid">
+            <div class="anima-avatars__empty" data-i18n="avatars.loading">Loading avatars...</div>
+        </div>
+    </div>
+
+    <!-- ========== VIEW: Avatar Create Wizard ========== -->
+    <div class="anima-view" id="anima_view_create" style="display:none">
+        <div class="anima-create__header">
+            <button id="anima_create_back_btn" class="anima-btn anima-btn--icon" data-i18n-title="create.back"><i class="fa-solid fa-arrow-left"></i></button>
+            <h3 class="anima-create__title" data-i18n="create.title">Create Avatar</h3>
+            <div class="anima-create__steps">
+                <span class="anima-step anima-step--active" data-step="1" data-i18n="create.stepPhoto">1. Photo</span>
+                <span class="anima-step" data-step="2" data-i18n="create.stepName">2. Name</span>
+                <span class="anima-step" data-step="3" data-i18n="create.stepVoice">3. Voice</span>
+            </div>
+        </div>
+
+        <!-- Step 1: Photo Upload -->
+        <div class="anima-create__step" id="anima_create_step1">
+            <div class="anima-create__upload-area" id="anima_upload_area">
+                <div class="anima-create__upload-placeholder" id="anima_upload_placeholder">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <p data-i18n="create.uploadPrompt">Click or drag to upload a portrait photo</p>
+                    <span class="anima-create__upload-hint" data-i18n="create.uploadHint">JPG / PNG, under 10 MB, 768×1024 recommended</span>
+                </div>
+                <img id="anima_upload_preview" class="anima-create__upload-preview" style="display:none" alt="Preview" />
+                <input type="file" id="anima_upload_input" accept="image/jpeg,image/png" style="display:none" />
+            </div>
+            <div id="anima_upload_status" class="anima-create__status"></div>
+            <div class="anima-create__nav">
+                <button id="anima_step1_next" class="anima-btn anima-btn--primary" disabled data-i18n="create.next">Next</button>
+            </div>
+        </div>
+
+        <!-- Step 2: Name -->
+        <div class="anima-create__step" id="anima_create_step2" style="display:none">
+            <div class="anima-create__field">
+                <label for="anima_create_name" data-i18n="create.nameLabel">Avatar Name</label>
+                <input type="text" id="anima_create_name" data-i18n-placeholder="create.namePlaceholder" placeholder="Give your avatar a name" maxlength="50" />
+            </div>
+            <div class="anima-create__nav">
+                <button id="anima_step2_prev" class="anima-btn" data-i18n="create.back">Back</button>
+                <button id="anima_step2_next" class="anima-btn anima-btn--primary" disabled data-i18n="create.next">Next</button>
+            </div>
+        </div>
+
+        <!-- Step 3: Voice -->
+        <div class="anima-create__step" id="anima_create_step3" style="display:none">
+            <div class="anima-create__field">
+                <label for="anima_create_language" data-i18n="create.langLabel">Language</label>
+                <select id="anima_create_language"><option value="" data-i18n="create.langLoading">Loading languages...</option></select>
+            </div>
+            <div class="anima-create__field">
+                <label for="anima_create_voice" data-i18n="create.voiceLabel">Voice</label>
+                <select id="anima_create_voice"><option value="" data-i18n="create.voiceSelectLang">Select a language first</option></select>
+            </div>
+            <div id="anima_create_voice_status" class="anima-create__status"></div>
+            <div class="anima-create__nav">
+                <button id="anima_step3_prev" class="anima-btn" data-i18n="create.back">Back</button>
+                <button id="anima_step3_skip" class="anima-btn" data-i18n="create.skip">Skip</button>
+                <button id="anima_step3_submit" class="anima-btn anima-btn--primary" data-i18n="create.submit">Create Avatar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== VIEW: Runtime (3D avatar display) ========== -->
+    <div class="anima-view" id="anima_view_runtime" style="display:none">
+        <div class="anima-runtime__header">
+            <button id="anima_runtime_back_btn" class="anima-btn anima-btn--icon" data-i18n-title="runtime.backTitle"><i class="fa-solid fa-arrow-left"></i></button>
+            <span id="anima_runtime_avatar_name" class="anima-runtime__name" data-i18n="runtime.defaultName">Digital Human</span>
+            <div class="anima-runtime__header-actions">
+                <button id="anima_runtime_voice_btn" class="anima-btn anima-btn--icon" data-i18n-title="runtime.voiceTitle"><i class="fa-solid fa-headphones"></i></button>
+                <!-- <button id="anima_runtime_lipsync_btn" class="anima-btn anima-btn--icon" title="Test lip-sync"><i class="fa-solid fa-comment-dots"></i></button> -->
+            </div>
+        </div>
+
+        <div class="anima-runtime__body">
+            <div class="anima-runtime__stage">
+                <div id="anima_runtime_empty" class="anima-runtime__empty" data-i18n="runtime.loading">Loading avatar...</div>
+                <iframe id="anima_runtime_frame" class="anima-runtime__frame"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                    allow="autoplay; camera; microphone; clipboard-read; clipboard-write"
+                    style="display:none"></iframe>
+            </div>
+        </div>
+
+        <!-- Voice picker overlay -->
+        <div id="anima_voice_overlay" class="anima-voice-overlay" style="display:none"></div>
+        <!-- Voice picker slide panel -->
+        <div id="anima_voice_panel" class="anima-voice-panel" style="display:none">
+            <div class="anima-voice-panel__header">
+                <h4 data-i18n="voice.title">Voice</h4>
+                <button id="anima_voice_panel_close" class="anima-btn anima-btn--icon"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="anima_voice_list" class="anima-voice-panel__body"></div>
+        </div>
+
+    </div>
+
+    <!-- ========== VIEW: Settings ========== -->
+    <div class="anima-view" id="anima_view_settings" style="display:none">
+        <div class="anima-settings__header">
+            <button id="anima_settings_back_btn" class="anima-btn anima-btn--icon" data-i18n-title="create.back"><i class="fa-solid fa-arrow-left"></i></button>
+            <h3 data-i18n="settings.title">Settings</h3>
+        </div>
+        <div class="anima-settings__body">
+            <div class="anima-settings__row">
+                <label class="anima-settings__checkbox-label">
+                    <input type="checkbox" id="anima_s_auto_lipsync" />
+                    <span data-i18n="settings.autoLipSync">Auto lip-sync on new replies</span>
+                </label>
+            </div>
+            <div class="anima-settings__row">
+                <label class="anima-settings__checkbox-label">
+                    <input type="checkbox" id="anima_s_use_st_tts" />
+                    <span data-i18n="settings.useStTts">Use SillyTavern TTS audio for lip-sync</span>
+                </label>
+                <p class="anima-settings__hint" data-i18n="settings.useStTtsHint">When enabled, intercepts ST TTS audio instead of using Anima's built-in TTS. ST TTS playback will be suppressed — audio plays through the avatar only.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== Resize handle ========== -->
+    <div class="anima-panel__resize-handle" id="anima_resize_handle"></div>
+</div>
