@@ -8,7 +8,7 @@
 
 ## 简介
 
-**Anima** 是一个 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 第三方扩展，集成了 [Anima](https://sumi.sumeruai.com) 3D 数字人能力。你可以把数字人头像绑定到角色，在聊天时显示 3D 形象、播放语音，并自动进行口型同步。
+**Anima** 是一个 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 第三方扩展，集成了 [Anima](https://www.sumeruai.us) 3D 数字人能力。你可以把数字人头像绑定到角色，在聊天时显示 3D 形象、播放语音，并自动进行口型同步。
 
 ## 功能
 
@@ -68,6 +68,6 @@ git clone https://github.com/MrCzp/Anima_For_SillyTavern anima
 
 ## 相关链接
 
-- [Anima 平台](https://sumi.sumeruai.com)
+- [Anima 平台](https://www.sumeruai.us)
 - [问题反馈](https://github.com/sumeurai/Anima-For-SillyTavern/issues)
 - [MIT License](./LICENSE)

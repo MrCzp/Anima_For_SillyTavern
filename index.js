@@ -17,8 +17,8 @@ const MODULE_NAME = (() => {
 const LOGO_URL = new URL('./static/logo.png', import.meta.url).pathname;
 const SETTINGS_KEY = 'anima';
 const DEFAULT_RUNTIME_URL = new URL('./runtime.html', import.meta.url).href;
-const DEFAULT_API_BASE = 'https://sumi.sumeruai.com';
-const OFFICIAL_AVATAR_IDS = ['1453606505259008', '1453607839064064'];
+const DEFAULT_API_BASE = 'https://www.sumeruai.us';
+const OFFICIAL_AVATAR_IDS = ['1455928016732160', '1455927862157312'];
 const SSE_STATUS_MAP = Object.freeze({
     '1': 'check',
     '2': 'style-completed',
@@ -29,7 +29,6 @@ const SSE_STATUS_MAP = Object.freeze({
 
 const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
-    apiBaseUrl: DEFAULT_API_BASE,
     authToken: '',
     authMailbox: '',
     authPassword: '',
@@ -78,6 +77,10 @@ function ensureSettings() {
     const bucket = getExtSettings();
     const cur = /** @type {Record<string, any>} */ (bucket[SETTINGS_KEY] ?? {});
     let changed = false;
+    if (Object.hasOwn(cur, 'apiBaseUrl')) {
+        delete cur.apiBaseUrl;
+        changed = true;
+    }
     for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
         if (!Object.hasOwn(cur, k)) {
             cur[k] = v && typeof v === 'object' ? (Array.isArray(v) ? [...v] : { ...v }) : v;
@@ -85,7 +88,6 @@ function ensureSettings() {
         }
     }
     if (!cur.bindings || typeof cur.bindings !== 'object') { cur.bindings = {}; changed = true; }
-    if (!String(cur.apiBaseUrl || '').trim()) { cur.apiBaseUrl = DEFAULT_API_BASE; changed = true; }
     if (bucket[SETTINGS_KEY] !== cur) { bucket[SETTINGS_KEY] = cur; changed = true; }
     if (changed) getContext().saveSettingsDebounced();
     return /** @type {any} */ (bucket[SETTINGS_KEY]);
@@ -93,7 +95,7 @@ function ensureSettings() {
 
 function getConfig() {
     const s = ensureSettings();
-    return { apiBaseUrl: s.apiBaseUrl, authToken: s.authToken, defaultVoiceId: s.defaultVoiceId, autoLipSync: s.autoLipSync };
+    return { apiBaseUrl: DEFAULT_API_BASE, authToken: s.authToken, defaultVoiceId: s.defaultVoiceId, autoLipSync: s.autoLipSync };
 }
 
 function saveSettings() { getContext().saveSettingsDebounced(); }
@@ -1281,7 +1283,7 @@ function sendRuntimePayload() {
             voiceId: binding.voiceId || s.defaultVoiceId,
         },
         config: {
-            apiBaseUrl: s.apiBaseUrl,
+            apiBaseUrl: DEFAULT_API_BASE,
             authToken: s.authToken,
             defaultVoiceId: s.defaultVoiceId,
             autoLipSync: s.useStTts ? false : s.autoLipSync,

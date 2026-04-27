@@ -8,7 +8,7 @@
 
 ## Introduction
 
-**Anima** is a third-party extension for [SillyTavern](https://github.com/SillyTavern/SillyTavern) that adds [Anima](https://sumi.sumeruai.com) 3D digital avatar capabilities. You can bind an avatar to a character, show a live 3D presence during chat, play voice output, and automatically synchronize lip movement with generated speech.
+**Anima** is a third-party extension for [SillyTavern](https://github.com/SillyTavern/SillyTavern) that adds [Anima](https://www.sumeruai.us) 3D digital avatar capabilities. You can bind an avatar to a character, show a live 3D presence during chat, play voice output, and automatically synchronize lip movement with generated speech.
 
 ## Features
 
@@ -68,6 +68,6 @@ Then refresh the SillyTavern page.
 
 ## Links
 
-- [Anima Platform](https://sumi.sumeruai.com)
+- [Anima Platform](https://www.sumeruai.us)
 - [Report Issues](https://github.com/sumeurai/Anima-For-SillyTavern/issues)
 - [MIT License](./LICENSE)

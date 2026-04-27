@@ -20,6 +20,6 @@
 ## Quick Links
 
 - [GitHub Repository](https://github.com/sumeurai/Anima-For-SillyTavern)
-- [Anima Platform](https://sumi.sumeruai.com)
+- [Anima Platform](https://www.sumeruai.us)
 - [SillyTavern](https://github.com/SillyTavern/SillyTavern)
 - [License](./LICENSE)
