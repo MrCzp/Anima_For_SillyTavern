@@ -2026,6 +2026,24 @@ function wireUpPopup() {
         s.language = newLang;
         saveSettings();
         if (popupEl) updateI18n(popupEl);
+        // Re-render dynamic content for the current view
+        if (avatarListCache.length > 0) renderAvatarGrid();
+        if (currentView === 'runtime') {
+            const nameEl = popupEl?.querySelector('#anima_runtime_avatar_name');
+            const empty = popupEl?.querySelector('#anima_runtime_empty');
+            if (nameEl && !nameEl.textContent?.trim()) nameEl.textContent = t('runtime.defaultName');
+            if (empty && empty.textContent?.trim()) /** @type {HTMLElement} */ (empty).textContent = t('runtime.noModel');
+            sendRuntimePayload();
+        }
+        if (currentView === 'create' && createWizardState) {
+            void loadCreateLanguages();
+            const voiceSelect = /** @type {HTMLSelectElement|null} */ (popupEl?.querySelector('#anima_create_voice'));
+            if (voiceSelect && !createWizardState.languageId) {
+                voiceSelect.innerHTML = `<option value="">${escapeHtml(t('create.voiceSelectLang'))}</option>`;
+            } else if (createWizardState.languageId) {
+                void loadCreateVoices(createWizardState.languageId);
+            }
+        }
         // Update dynamic label
         const langBtn = popupEl?.querySelector('#anima_lang_toggle');
         if (langBtn) langBtn.textContent = newLang === 'zh_cn' ? 'EN' : '中文';
