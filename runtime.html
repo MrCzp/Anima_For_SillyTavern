@@ -60,7 +60,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
     justify-content: center;
     gap: 10px;
     padding-bottom: 36px;
-    z-index: 5;
+    z-index: 20;
 }
 .loading-center.is-hidden { display: none; }
 .loading-avatar {
@@ -102,7 +102,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
     gap: 10px;
     background: radial-gradient(ellipse at center, rgba(0,0,0,0.28), rgba(0,0,0,0.55));
     backdrop-filter: blur(2px);
-    z-index: 8;
+    z-index: 21;
     pointer-events: none;
 }
 .loading-mask.is-hidden { display: none; }
@@ -244,6 +244,117 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
     height: 18px;
 }
 
+/* ── Camera panel ── */
+.camera-panel {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    width: 160px;
+    padding: 8px;
+    border-radius: 16px;
+    background: rgba(7, 10, 18, 0.72);
+    border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.28);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 11;
+}
+.camera-panel.is-hidden {
+    display: none;
+}
+.camera-panel.is-dragging {
+    user-select: none;
+}
+.camera-drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 24px;
+    padding: 0 4px;
+    cursor: grab;
+    color: rgba(255,255,255,0.88);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.camera-drag-handle::after {
+    content: '';
+    width: 24px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.18);
+    box-shadow: 0 6px 0 rgba(255,255,255,0.12), 0 -6px 0 rgba(255,255,255,0.12);
+}
+.camera-panel.is-dragging .camera-drag-handle {
+    cursor: grabbing;
+}
+.camera-preview-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border-radius: 12px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+.camera-preview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: none;
+    transform: scaleX(-1);
+}
+.camera-preview.is-visible { display: block; }
+.camera-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.4;
+    color: rgba(255,255,255,0.55);
+}
+.camera-placeholder.is-hidden { display: none; }
+.camera-controls {
+    display: flex;
+    gap: 6px;
+}
+.camera-btn {
+    flex: 1;
+    min-height: 32px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+    color: #f5f5f5;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s, opacity 0.2s;
+}
+.camera-btn:hover {
+    background: rgba(255,255,255,0.2);
+    transform: translateY(-1px);
+}
+.camera-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+.camera-btn.is-live {
+    background: rgba(239,68,68,0.85);
+}
+.camera-btn.is-live:hover {
+    background: rgba(220,38,38,0.95);
+}
+
 /* ── Chat Bottom ── */
 .chat-bottom {
     position: relative;
@@ -265,6 +376,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 100px;
     background: rgba(255,255,255,0.06);
+}
+.mode-toggle.is-hidden {
+    display: none;
 }
 .mode-toggle__btn {
     padding: 5px 14px;
@@ -435,7 +549,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
 <body>
 <main class="runtime">
     <!-- Character display area -->
-    <div class="character-area">
+    <div class="character-area" id="character_area">
         <div class="character-inner">
             <canvas id="stage_canvas"></canvas>
             <img id="stage_poster" alt="Avatar" />
@@ -460,6 +574,17 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
                 <span class="bubble-text-content" id="bubble_text"></span>
             </div>
         </div>
+        <div class="camera-panel" id="camera_panel">
+            <div class="camera-drag-handle" id="camera_drag_handle">Camera</div>
+            <div class="camera-preview-wrap">
+                <video id="camera_preview" class="camera-preview" autoplay playsinline muted></video>
+                <div class="camera-placeholder" id="camera_placeholder">Camera preview is off</div>
+            </div>
+            <div class="camera-controls">
+                <button class="camera-btn" id="camera_toggle_btn" type="button">Open</button>
+                <button class="camera-btn" id="camera_capture_btn" type="button" disabled>Capture</button>
+            </div>
+        </div>
         <!-- Interrupt button -->
         <button class="interrupt-btn" id="interrupt_btn" title="Stop">
             <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
@@ -469,7 +594,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
     <!-- Chat bottom area (hidden during loading) -->
     <div class="chat-bottom" id="chat_bottom" style="display:none">
         <!-- Mode toggle -->
-        <div class="mode-toggle" id="mode_toggle">
+        <div class="mode-toggle is-hidden" id="mode_toggle">
             <button class="mode-toggle__btn is-active" id="mode_text_btn" data-mode="text">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -486,7 +611,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
             </button>
         </div>
         <!-- Text mode input -->
-        <div class="text-mode-area" id="text_mode_area">
+        <div class="text-mode-area" id="text_mode_area" style="display:none">
             <div class="text-input-wrap">
                 <input type="text" id="chat_input" class="text-input" placeholder="Type a message..." autocomplete="off" />
             </div>
@@ -498,7 +623,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
             </button>
         </div>
         <!-- Voice mode input -->
-        <div class="voice-mode-area" id="voice_mode_area" style="display:none">
+        <div class="voice-mode-area" id="voice_mode_area">
             <div class="voice-bar-wrap" id="voice_bar">
                 <span class="voice-label">Tap mic to speak</span>
                 <div class="v-bar" style="--bar-h:8px"></div><div class="v-bar" style="--bar-h:14px"></div>
@@ -553,8 +678,13 @@ let currentAudio = null;
 // Typewriter state
 let typewriterTimer = null;
 
+// Camera state
+let cameraStream = null;
+let cameraStartPromise = null;
+let cameraPanelDrag = null;
+
 // Chat mode
-let chatMode = 'text'; // 'text' | 'voice'
+let chatMode = 'voice'; // 'text' | 'voice'
 
 // ──── Acknowledgment phrases ────
 const ACK_PHRASES = [
@@ -592,6 +722,203 @@ function setAvatarName(name) {
     $('bubble_name').textContent = avatarName.toUpperCase();
 }
 
+function setCameraStatus(text) {
+    void text;
+}
+
+function setCameraPanelVisible(visible) {
+    $('camera_panel').classList.toggle('is-hidden', !visible);
+}
+
+function updateCameraUi(active) {
+    $('camera_preview').classList.toggle('is-visible', active);
+    $('camera_placeholder').classList.toggle('is-hidden', active);
+    $('camera_capture_btn').disabled = !active;
+    $('camera_toggle_btn').textContent = active ? 'Close' : 'Open';
+    $('camera_toggle_btn').classList.toggle('is-live', active);
+}
+
+function beginCameraPanelDrag(event) {
+    if (event.button !== 0) return;
+
+    const panel = $('camera_panel');
+    const area = $('character_area');
+    if (!panel || !area) return;
+
+    const panelRect = panel.getBoundingClientRect();
+    const areaRect = area.getBoundingClientRect();
+    cameraPanelDrag = {
+        offsetX: event.clientX - panelRect.left,
+        offsetY: event.clientY - panelRect.top,
+    };
+
+    panel.style.left = `${panelRect.left - areaRect.left}px`;
+    panel.style.top = `${panelRect.top - areaRect.top}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.classList.add('is-dragging');
+    event.preventDefault();
+}
+
+function dragCameraPanel(event) {
+    if (!cameraPanelDrag) return;
+
+    const panel = $('camera_panel');
+    const area = $('character_area');
+    if (!panel || !area) return;
+
+    const areaRect = area.getBoundingClientRect();
+    const maxLeft = Math.max(0, area.clientWidth - panel.offsetWidth);
+    const maxTop = Math.max(0, area.clientHeight - panel.offsetHeight);
+    const left = Math.min(Math.max(0, event.clientX - areaRect.left - cameraPanelDrag.offsetX), maxLeft);
+    const top = Math.min(Math.max(0, event.clientY - areaRect.top - cameraPanelDrag.offsetY), maxTop);
+
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+}
+
+function endCameraPanelDrag() {
+    if (!cameraPanelDrag) return;
+    cameraPanelDrag = null;
+    $('camera_panel')?.classList.remove('is-dragging');
+}
+
+async function waitForVideoMetadata(video) {
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+        return;
+    }
+
+    await new Promise((resolve, reject) => {
+        const onLoaded = () => {
+            cleanup();
+            resolve(undefined);
+        };
+        const onError = () => {
+            cleanup();
+            reject(new Error('Camera preview failed to initialize'));
+        };
+        const cleanup = () => {
+            video.removeEventListener('loadedmetadata', onLoaded);
+            video.removeEventListener('error', onError);
+        };
+
+        video.addEventListener('loadedmetadata', onLoaded, { once: true });
+        video.addEventListener('error', onError, { once: true });
+    });
+}
+
+function stopCameraStream() {
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
+
+    const video = $('camera_preview');
+    video.pause();
+    video.srcObject = null;
+    updateCameraUi(false);
+    setCameraStatus('Camera off');
+}
+
+async function startCameraStream() {
+    if (cameraStream) {
+        updateCameraUi(true);
+        setCameraStatus('Camera live');
+        return;
+    }
+
+    if (cameraStartPromise) {
+        await cameraStartPromise;
+        return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraStatus('Camera unavailable in this browser');
+        return;
+    }
+
+    setCameraStatus('Starting camera...');
+    cameraStartPromise = (async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'user',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                },
+                audio: false,
+            });
+
+            const video = $('camera_preview');
+            cameraStream = stream;
+            video.srcObject = stream;
+            await waitForVideoMetadata(video);
+            await video.play().catch(() => {});
+            updateCameraUi(true);
+            setCameraStatus('Camera live');
+        } catch (err) {
+            console.warn('[Anima Runtime] Camera access failed:', err);
+            stopCameraStream();
+            setCameraStatus('Camera permission denied');
+        } finally {
+            cameraStartPromise = null;
+        }
+    })();
+
+    await cameraStartPromise;
+}
+
+async function toggleCameraStream() {
+    if (cameraStream) {
+        stopCameraStream();
+        return;
+    }
+
+    await startCameraStream();
+}
+
+function captureCameraFrame() {
+    if (!cameraStream) {
+        setCameraStatus('Open the camera first');
+        return;
+    }
+
+    const video = $('camera_preview');
+    if (!video.videoWidth || !video.videoHeight) {
+        setCameraStatus('Camera not ready');
+        return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+        setCameraStatus('Capture failed');
+        return;
+    }
+
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const imageDataUrl = canvas.toDataURL('image/png');
+    const text = $('chat_input').value.trim();
+    $('chat_input').value = '';
+
+    try {
+        window.parent.postMessage({
+            type: 'anima-runtime-command',
+            command: 'camera-capture',
+            imageDataUrl,
+            text,
+        }, '*');
+    } catch {
+        setCameraStatus('Snapshot failed to send');
+    }
+}
+
 // ──── Loading state ────
 let isLoading = true;
 
@@ -608,6 +935,7 @@ function enterLoadingState(posterUrl, name) {
     $('loading_name').textContent = name || avatarName || 'Avatar';
     $('loading_center').classList.remove('is-hidden');
     $('loading_mask').classList.remove('is-hidden');
+    setCameraPanelVisible(false);
     // Hide chat UI
     $('chat_bottom').style.display = 'none';
     $('speech_bubble').classList.remove('is-visible');
@@ -618,6 +946,7 @@ function exitLoadingState() {
     isLoading = false;
     $('loading_center').classList.add('is-hidden');
     $('loading_mask').classList.add('is-hidden');
+    setCameraPanelVisible(true);
     // Show chat UI
     $('chat_bottom').style.display = '';
 }
@@ -788,6 +1117,7 @@ function fullCleanup() {
     cancelAcknowledgment();
     clearBubble();
     stopAudio();
+    stopCameraStream();
     destroyRenderer();
     setBroadcasting(false);
     latestPayload = null;
@@ -1378,6 +1708,12 @@ function setMode(mode) {
 
 $('mode_text_btn').addEventListener('click', () => setMode('text'));
 $('mode_voice_btn').addEventListener('click', () => setMode('voice'));
+$('camera_toggle_btn').addEventListener('click', () => { void toggleCameraStream(); });
+$('camera_capture_btn').addEventListener('click', () => captureCameraFrame());
+$('camera_drag_handle').addEventListener('pointerdown', beginCameraPanelDrag);
+window.addEventListener('pointermove', dragCameraPanel);
+window.addEventListener('pointerup', endCameraPanelDrag);
+window.addEventListener('pointercancel', endCameraPanelDrag);
 
 // ──── Interrupt button ────
 $('interrupt_btn').addEventListener('click', () => {
@@ -1499,6 +1835,10 @@ function blobToBase64Raw(blob) {
     });
 }
 
+window.addEventListener('beforeunload', () => stopCameraStream());
+setMode(chatMode);
+updateCameraUi(false);
+setCameraPanelVisible(false);
 setStatus('Runtime ready');
 </script>
 </body>

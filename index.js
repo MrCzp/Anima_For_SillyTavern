@@ -1,11 +1,14 @@
 import { getContext, renderExtensionTemplateAsync } from '../../../extensions.js';
-import { sendMessageAsUser } from '../../../../script.js';
+import { chat_metadata, eventSource, event_types } from '../../../../script.js';
 import {
     loginApi, registerApi, avatarsList, avatarGet, avatarsUpdate, avatarsDelete,
     preGeneration, avatarsUpload, validateImage, ttsUpdate, audioLanguageList, audioList,
     ttsTransform, atfDt, modelGenerate, openGenerationSSE, probeApi,
 } from './runtime-api.js';
 import { t, initLang, getCurrentLang, setLang, updateI18n } from './i18n.js';
+import { getMessageTimeStamp } from '../../../RossAscends-mods.js';
+import { MEDIA_DISPLAY, MEDIA_SOURCE, MEDIA_TYPE } from '../../../constants.js';
+import { saveBase64AsFile } from '../../../utils.js';
 
 /* ───────── Constants ───────── */
 
@@ -217,6 +220,23 @@ let generationSSERetryTimers = new Map();
 let createWizardState = null;
 /** @type {number} */
 let replyEventId = 0;
+
+/**
+ * @typedef {{ audioBase64: string, text: string, mimeType?: string }} ExternalTtsQueueItem
+ */
+
+/**
+ * @typedef {HTMLAudioElement & {
+ *   _animaPatched?: boolean,
+ *   _animaOrigPlay?: () => Promise<void>,
+ *   _animaOrigAutoplay?: boolean,
+ *   _animaOrigMuted?: boolean,
+ *   _animaOrigVolume?: number,
+ *   _animaSrcObserver?: MutationObserver,
+ *   _animaOnPlaying?: EventListener,
+ *   _animaSrcDebug?: () => void,
+ * }} AnimaPatchedAudioElement
+ */
 
 /* ───────── Navigation ───────── */
 
@@ -1384,9 +1404,12 @@ function attachBridge() {
         }
         if (event.data?.type !== 'anima-runtime-command') return;
 
-        const { command, text } = event.data;
+        const { command, text, imageDataUrl } = event.data;
         if (command === 'chat-send' && text) {
             void handleRuntimeChatSend(String(text));
+        }
+        if (command === 'camera-capture' && imageDataUrl) {
+            void handleRuntimeCameraCapture(String(imageDataUrl), typeof text === 'string' ? text : '');
         }
         if (command === 'interrupt') {
             // Clear external TTS queue so stale audio doesn't play after re-asking
@@ -1410,6 +1433,80 @@ function attachBridge() {
     cleanupBridge = () => window.removeEventListener('message', onMessage);
 }
 
+/** @param {any} ctx */
+async function triggerRuntimeReply(ctx) {
+    if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
+        await ctx.executeSlashCommandsWithOptions('/trigger await=true');
+        return true;
+    }
+
+    console.warn('[Anima] Auto-trigger unavailable: executeSlashCommandsWithOptions is missing');
+    return false;
+}
+
+function syncRuntimeAfterReply() {
+    sendRuntimePayload();
+
+    const s = ensureSettings();
+    if (!s.autoLipSync && !s.useStTts) {
+        const frame = /** @type {HTMLIFrameElement|null} */ (popupEl?.querySelector('#anima_runtime_frame'));
+        if (frame?.contentWindow) {
+            frame.contentWindow.postMessage({ type: 'anima-runtime-control', command: 'lipsync' }, '*');
+        }
+    }
+}
+
+/** @param {string} imageDataUrl @param {string} text */
+async function sendRuntimeImageMessage(imageDataUrl, text) {
+    const ctx = getContext();
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(imageDataUrl || '');
+    if (!match) {
+        throw new Error('Invalid image payload');
+    }
+
+    const mimeType = match[1];
+    const base64Data = match[2];
+    const extFromMime = mimeType.split('/')[1]?.split('+')[0] || 'png';
+    const extension = extFromMime === 'jpeg' ? 'jpg' : extFromMime;
+    const subFolder = String(ctx.name2 || getBindingMeta().label || 'anima-camera');
+    const imagePath = await saveBase64AsFile(base64Data, subFolder, '', extension);
+    const messageText = String(text || '').trim() || '[Camera snapshot]';
+
+    const mediaAttachment = {
+        url: imagePath,
+        type: MEDIA_TYPE.getFromMime(mimeType) || MEDIA_TYPE.IMAGE,
+        title: messageText,
+        source: MEDIA_SOURCE.UPLOAD,
+    };
+
+    const message = {
+        name: ctx.name1,
+        is_user: true,
+        send_date: getMessageTimeStamp(),
+        mes: messageText,
+        extra: {
+            media: [mediaAttachment],
+            media_display: MEDIA_DISPLAY.GALLERY,
+            media_index: 0,
+            inline_image: true,
+            hide_media: true,
+            hide_message_ui: true,
+        },
+    };
+
+    chat_metadata.tainted = true;
+    ctx.chat.push(message);
+    const messageId = ctx.chat.length - 1;
+    await eventSource.emit(event_types.MESSAGE_SENT, messageId);
+    ctx.addOneMessage(message);
+    await eventSource.emit(event_types.USER_MESSAGE_RENDERED, messageId);
+    await ctx.saveChat();
+
+    if (typeof ctx.scrollOnMediaLoad === 'function') {
+        setTimeout(() => ctx.scrollOnMediaLoad(), 50);
+    }
+}
+
 /**
  * Receives text from the runtime iframe chat bar and sends it into ST chat.
  * Flow: inject user message → trigger AI generation → after reply, force lip-sync.
@@ -1421,7 +1518,7 @@ async function handleRuntimeChatSend(text) {
         // Use ST slash commands to send user message + trigger AI reply
         if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
             await ctx.executeSlashCommandsWithOptions(`/send ${text}`);
-            await ctx.executeSlashCommandsWithOptions('/trigger await=true');
+            await triggerRuntimeReply(ctx);
         } else {
             // Fallback: manipulate textarea directly
             const textarea = document.querySelector('#send_textarea');
@@ -1433,19 +1530,22 @@ async function handleRuntimeChatSend(text) {
                 await new Promise(r => setTimeout(r, 500));
             }
         }
-        // After AI reply, push latest messages to iframe
-        sendRuntimePayload();
-        // Only send explicit lipsync if autoLipSync is off and useStTts is off
-        // (when useStTts is on, the TTS event handler drives lip-sync)
-        const s = ensureSettings();
-        if (!s.autoLipSync && !s.useStTts) {
-            const frame = /** @type {HTMLIFrameElement|null} */ (popupEl?.querySelector('#anima_runtime_frame'));
-            if (frame?.contentWindow) {
-                frame.contentWindow.postMessage({ type: 'anima-runtime-control', command: 'lipsync' }, '*');
-            }
-        }
+        syncRuntimeAfterReply();
     } catch (err) {
         console.warn('[Anima] handleRuntimeChatSend error:', err);
+    }
+}
+
+/** @param {string} imageDataUrl @param {string} text */
+async function handleRuntimeCameraCapture(imageDataUrl, text) {
+    try {
+        const ctx = getContext();
+        await sendRuntimeImageMessage(imageDataUrl, text);
+        await triggerRuntimeReply(ctx);
+        syncRuntimeAfterReply();
+    } catch (err) {
+        console.warn('[Anima] handleRuntimeCameraCapture error:', err);
+        getToastr().error('Failed to send camera snapshot');
     }
 }
 
@@ -1486,7 +1586,7 @@ function blobToRawBase64(blobOrStr) {
  * Queue for external TTS audio chunks.
  * When ST TTS sends multiple segments (multi-voice, paragraphs), we queue them
  * so each lip-sync completes before the next starts.
- * @type {{ audioBase64: string, text: string }[]}
+ * @type {ExternalTtsQueueItem[]}
  */
 const externalTtsQueue = [];
 let externalTtsProcessing = false;
@@ -1518,6 +1618,10 @@ function processExternalTtsQueue() {
     if (externalTtsProcessing || externalTtsQueue.length === 0) return;
     externalTtsProcessing = true;
     const item = externalTtsQueue.shift();
+    if (!item) {
+        externalTtsProcessing = false;
+        return;
+    }
     sendExternalTtsToRuntime(item.audioBase64, item.text, item.mimeType);
 }
 
@@ -1534,7 +1638,7 @@ function processExternalTtsQueue() {
  * @returns {boolean} true if patched successfully
  */
 function patchTtsAudioElement() {
-    const el = /** @type {HTMLAudioElement|null} */ (document.getElementById('tts_audio'));
+    const el = /** @type {AnimaPatchedAudioElement|null} */ (document.getElementById('tts_audio'));
     if (!el) {
         console.warn('[Anima] #tts_audio element not found — TTS intercept cannot patch audio');
         return false;
@@ -1555,7 +1659,7 @@ function patchTtsAudioElement() {
 
     // ── Override play() ──
     // When intercepting: don't play; just dispatch 'ended' so ST's queue advances.
-    el.play = function () {
+    el.play = /** @type {typeof el.play} */ (/** @type {unknown} */ (/** @this {AnimaPatchedAudioElement} */ function () {
         if (ttsInterceptActive) {
             console.info('[Anima] #tts_audio.play() intercepted — suppressing');
             // Use queueMicrotask to dispatch ended as soon as possible but still async
@@ -1567,8 +1671,8 @@ function patchTtsAudioElement() {
             });
             return Promise.resolve();
         }
-        return el._animaOrigPlay();
-    };
+        return el._animaOrigPlay ? el._animaOrigPlay() : Promise.resolve();
+    }));
 
     // Log when src is set to confirm interception status
     el._animaSrcDebug = () => {
@@ -1615,7 +1719,7 @@ function patchTtsAudioElement() {
  * Unpatch the ST TTS audio element.
  */
 function unpatchTtsAudioElement() {
-    const el = /** @type {HTMLAudioElement|null} */ (document.getElementById('tts_audio'));
+    const el = /** @type {AnimaPatchedAudioElement|null} */ (document.getElementById('tts_audio'));
     if (!el || !el._animaPatched) return;
 
     // Restore play()
