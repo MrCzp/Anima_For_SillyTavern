@@ -22,6 +22,9 @@ const SETTINGS_KEY = 'anima';
 const DEFAULT_RUNTIME_URL = new URL('./runtime.html', import.meta.url).href;
 const DEFAULT_API_BASE = 'https://www.sumeruai.us';
 const OFFICIAL_AVATAR_IDS = ['1455928016732160', '1455927862157312'];
+const ANIMA_HIDDEN_CAMERA_MESSAGE_KEY = 'anima_hidden_camera_message';
+const ANIMA_HIDDEN_CAMERA_MESSAGE_CLASS = 'anima-hidden-camera-message';
+const ANIMA_HIDDEN_CAMERA_STYLE_ID = 'anima_hidden_camera_message_style';
 const SSE_STATUS_MAP = Object.freeze({
     '1': 'check',
     '2': 'style-completed',
@@ -251,6 +254,127 @@ function showView(name) {
     if (target) /** @type {HTMLElement} */ (target).style.display = '';
     // Sync TTS intercept when view changes
     syncTtsInterceptState();
+}
+
+/** @type {MutationObserver | null} */
+let hiddenCameraMessageObserver = null;
+/** @type {number | null} */
+let hiddenCameraMessageSyncFrame = null;
+let hiddenCameraMessageSupportBound = false;
+
+function ensureHiddenCameraMessageStyles() {
+    if (document.getElementById(ANIMA_HIDDEN_CAMERA_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = ANIMA_HIDDEN_CAMERA_STYLE_ID;
+    style.textContent = `#chat .mes.${ANIMA_HIDDEN_CAMERA_MESSAGE_CLASS}, #chat .mes[data-anima-hidden-camera-message="true"] { display: none !important; }`;
+    document.head.append(style);
+}
+
+/** @param {unknown} messageElement */
+function getHiddenCameraMessageElement(messageElement) {
+    if (messageElement instanceof HTMLElement) return messageElement;
+    if (messageElement && typeof messageElement === 'object' && 'jquery' in messageElement) {
+        const first = /** @type {{ 0?: unknown }} */ (messageElement)[0];
+        return first instanceof HTMLElement ? first : null;
+    }
+    return null;
+}
+
+/** @param {any} message */
+function isHiddenCameraMessage(message) {
+    const extra = message?.extra;
+    return extra?.[ANIMA_HIDDEN_CAMERA_MESSAGE_KEY] === true
+        || (extra?.hide_message_ui === true && message?.is_user === true && Array.isArray(extra?.media) && extra.media.length > 0);
+}
+
+/** @param {unknown} messageElement @param {boolean} isHidden */
+function setHiddenCameraMessageState(messageElement, isHidden) {
+    const element = getHiddenCameraMessageElement(messageElement);
+    if (!element) return;
+    element.classList.toggle(ANIMA_HIDDEN_CAMERA_MESSAGE_CLASS, isHidden);
+    element.dataset.animaHiddenCameraMessage = String(isHidden);
+}
+
+/** @param {unknown} messageElement */
+function syncHiddenCameraMessageElement(messageElement) {
+    const element = getHiddenCameraMessageElement(messageElement);
+    if (!element) return;
+
+    const messageId = Number(element.getAttribute('mesid'));
+    if (!Number.isInteger(messageId) || messageId < 0) {
+        setHiddenCameraMessageState(element, false);
+        return;
+    }
+
+    const ctx = getContext();
+    const message = Array.isArray(ctx.chat) ? ctx.chat[messageId] : null;
+    setHiddenCameraMessageState(element, isHiddenCameraMessage(message));
+}
+
+/** @param {ParentNode | null} [root] */
+function syncHiddenCameraMessages(root = null) {
+    const chatRoot = document.getElementById('chat');
+    if (!chatRoot) return;
+
+    const searchRoot = root instanceof HTMLElement ? root : chatRoot;
+    if (searchRoot instanceof HTMLElement && searchRoot.matches('.mes[mesid]')) {
+        syncHiddenCameraMessageElement(searchRoot);
+    }
+
+    searchRoot.querySelectorAll('.mes[mesid]').forEach(element => {
+        syncHiddenCameraMessageElement(element);
+    });
+}
+
+/** @param {number} [frames] */
+function scheduleHiddenCameraMessageSync(frames = 1) {
+    const remainingFrames = Math.max(1, frames);
+    if (hiddenCameraMessageSyncFrame !== null) {
+        cancelAnimationFrame(hiddenCameraMessageSyncFrame);
+    }
+
+    /** @param {number} framesLeft */
+    const tick = (framesLeft) => {
+        if (framesLeft > 1) {
+            hiddenCameraMessageSyncFrame = requestAnimationFrame(() => tick(framesLeft - 1));
+            return;
+        }
+
+        hiddenCameraMessageSyncFrame = null;
+        syncHiddenCameraMessages();
+    };
+
+    hiddenCameraMessageSyncFrame = requestAnimationFrame(() => tick(remainingFrames));
+}
+
+function startHiddenCameraMessageObserver() {
+    const chatRoot = document.getElementById('chat');
+    if (!chatRoot) return;
+
+    hiddenCameraMessageObserver?.disconnect();
+    hiddenCameraMessageObserver = new MutationObserver((records) => {
+        for (const record of records) {
+            for (const node of record.addedNodes) {
+                if (node instanceof HTMLElement) {
+                    syncHiddenCameraMessages(node);
+                }
+            }
+        }
+    });
+    hiddenCameraMessageObserver.observe(chatRoot, { childList: true, subtree: true });
+}
+
+function bindHiddenCameraMessageSupport() {
+    if (hiddenCameraMessageSupportBound) return;
+
+    hiddenCameraMessageSupportBound = true;
+    ensureHiddenCameraMessageStyles();
+    startHiddenCameraMessageObserver();
+    eventSource.on(event_types.CHAT_CHANGED, () => {
+        startHiddenCameraMessageObserver();
+        scheduleHiddenCameraMessageSync(2);
+    });
+    scheduleHiddenCameraMessageSync(2);
 }
 
 /* ───────── Login ───────── */
@@ -1489,8 +1613,7 @@ async function sendRuntimeImageMessage(imageDataUrl, text) {
             media_display: MEDIA_DISPLAY.GALLERY,
             media_index: 0,
             inline_image: true,
-            hide_media: true,
-            hide_message_ui: true,
+            [ANIMA_HIDDEN_CAMERA_MESSAGE_KEY]: true,
         },
     };
 
@@ -1498,9 +1621,11 @@ async function sendRuntimeImageMessage(imageDataUrl, text) {
     ctx.chat.push(message);
     const messageId = ctx.chat.length - 1;
     await eventSource.emit(event_types.MESSAGE_SENT, messageId);
-    ctx.addOneMessage(message);
+    const messageElement = ctx.addOneMessage(message);
+    setHiddenCameraMessageState(messageElement, true);
     await eventSource.emit(event_types.USER_MESSAGE_RENDERED, messageId);
     await ctx.saveChat();
+    scheduleHiddenCameraMessageSync();
 
     if (typeof ctx.scrollOnMediaLoad === 'function') {
         setTimeout(() => ctx.scrollOnMediaLoad(), 50);
@@ -2314,6 +2439,7 @@ function addMenuButton() {
 jQuery(() => {
     const s = ensureSettings();
     initLang(s.language || '');
+    bindHiddenCameraMessageSupport();
     addMenuButton();
     console.info('[Anima] extension loaded (v2 – multi-view + i18n)');
 });
