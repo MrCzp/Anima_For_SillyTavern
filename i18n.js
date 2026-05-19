@@ -78,7 +78,15 @@ const TRANSLATIONS = {
         'create.discardConfirm': 'Discard this avatar draft?',
 
         // Runtime
-        'runtime.loading': 'Video connecting...',
+        'runtime.loading': 'Video call connecting...',
+
+        // Calling
+        'calling.status': 'Video call connecting...',
+        'calling.preparing': 'Video call connecting...',
+        'calling.generated': 'Video call connecting...',
+        'calling.failed': 'Call failed',
+        'calling.firstGenerationHint': 'The first generation can take up to five minutes.',
+
         'runtime.noModel': 'No model URL. Select an avatar with a ready model.',
         'runtime.defaultName': 'Digital Human',
         'runtime.backTitle': 'Back to avatars',
@@ -136,7 +144,7 @@ const TRANSLATIONS = {
         'character.createAvatar': 'Create Digital Human',
         'character.generating': 'Generating...',
         'character.generatingProgress': 'Generating {0}%',
-        'character.connecting': 'Video connecting...',
+        'character.connecting': 'Video call connecting...',
         'character.invalidCard': 'This character card cannot be used for video chat.',
         'character.noFace': 'No face detected in the character image.',
         'character.generationFailed': 'Digital human generation failed.',
@@ -222,7 +230,15 @@ const TRANSLATIONS = {
         'create.discardConfirm': '放弃当前数字人草稿？',
 
         // Runtime
-        'runtime.loading': '视频接通中...',
+        'runtime.loading': '视频电话正在接通中...',
+
+        // Calling
+        'calling.status': '视频电话正在接通中...',
+        'calling.preparing': '视频电话正在接通中...',
+        'calling.generated': '视频电话正在接通中...',
+        'calling.failed': '呼叫失败',
+        'calling.firstGenerationHint': '首次生成需要等待五分钟',
+
         'runtime.noModel': '无模型地址。请选择一个已就绪的形象。',
         'runtime.defaultName': '数字人',
         'runtime.backTitle': '返回形象列表',
@@ -280,7 +296,7 @@ const TRANSLATIONS = {
         'character.createAvatar': '创建数字人',
         'character.generating': '生成中...',
         'character.generatingProgress': '生成中 {0}%',
-        'character.connecting': '视频接通中...',
+        'character.connecting': '视频电话正在接通中...',
         'character.invalidCard': '该角色卡无法开启视频聊天。',
         'character.noFace': '未在角色图片中检测到人脸。',
         'character.generationFailed': '数字人生成失败。',

@@ -115,6 +115,16 @@ function parseCid(raw) {
 }
 
 /**
+ * Add a short random alphanumeric suffix for remote avatar creation names.
+ * @param {string} name
+ * @returns {string}
+ */
+function makeRemoteAvatarName(name) {
+    const suffix = Math.random().toString(36).slice(2, 8);
+    return `${name}_${suffix}`;
+}
+
+/**
  * Get the avatar filename (without extension) for a character.
  * @param {number|null} [cid]
  * @returns {string|null}
@@ -236,6 +246,8 @@ let replyEventId = 0;
 let runtimeCharacterId = null;
 let isCreatingAvatar = false;
 let creationError = '';
+/** @type {number|null} */
+let callingHintTimer = null;
 
 /**
  * @typedef {{ audioBase64: string, text: string, mimeType?: string }} ExternalTtsQueueItem
@@ -434,11 +446,9 @@ function setLoginStatus(text, isError = false) {
 async function doLogin(mailbox, password) {
     const config = { ...getConfig(), authToken: '' };
     let result = await loginApi(mailbox, password, config);
-    let registered = false;
 
     if (!(result?.code === 0 || result?.code === 200)) {
         result = await registerApi(mailbox, password, mailbox.split('@')[0] || 'User', config);
-        registered = true;
         if (!(result?.code === 0 || result?.code === 200)) {
             throw new Error(result?.msg || 'Login/register failed');
         }
@@ -454,7 +464,6 @@ async function doLogin(mailbox, password) {
     s.authUserId = String(result?.data?.user?.id || '');
     saveSettings();
 
-    getToastr().info(registered ? t('login.accountCreated') : t('login.signedIn'));
     navigateAfterLogin();
 }
 
@@ -1156,28 +1165,13 @@ function renderCharacterView() {
     let statusHtml = '';
     let buttonHtml = '';
 
-    if (hasModel) {
-        statusHtml = `<div class="anima-character__status anima-character__status--ready"><i class="fa-solid fa-circle-check"></i> ${escapeHtml(t('character.ready'))}</div>`;
-        buttonHtml = `<button id="anima_video_call_btn" class="anima-btn anima-btn--primary anima-btn--wide anima-btn--video-call">
-            <i class="fa-solid fa-video"></i> <span>${escapeHtml(t('character.videoCall'))}</span>
-        </button>`;
-    } else if (creationError) {
+    if (creationError) {
         statusHtml = `<div class="anima-character__status anima-character__status--error"><i class="fa-solid fa-circle-xmark"></i> ${escapeHtml(creationError)}</div>`;
-        buttonHtml = `<button id="anima_retry_create_btn" class="anima-btn anima-btn--wide anima-btn--create-avatar">
-            <i class="fa-solid fa-rotate-right"></i> <span>${escapeHtml(t('character.retry'))}</span>
-        </button>`;
-    } else if (isGenerating || isCreatingAvatar) {
-        statusHtml = `<div class="anima-character__status anima-character__status--generating"><i class="fa-solid fa-spinner fa-spin"></i> ${escapeHtml(t('character.generating'))}</div>`;
-        buttonHtml = `<button class="anima-btn anima-btn--primary anima-btn--wide anima-btn--video-call" disabled>
-            <i class="fa-solid fa-video"></i> <span>${escapeHtml(t('character.videoCall'))}</span>
-        </button>`;
-    } else {
-        // No valid binding — auto-create will be triggered after render
-        statusHtml = `<div class="anima-character__status anima-character__status--generating"><i class="fa-solid fa-spinner fa-spin"></i> ${escapeHtml(t('character.generating'))}</div>`;
-        buttonHtml = `<button class="anima-btn anima-btn--primary anima-btn--wide anima-btn--video-call" disabled>
-            <i class="fa-solid fa-video"></i> <span>${escapeHtml(t('character.videoCall'))}</span>
-        </button>`;
     }
+    // Always show the invite button
+    buttonHtml = `<button id="anima_video_call_btn" class="anima-btn anima-btn--primary anima-btn--wide anima-btn--video-call">
+        <i class="fa-solid fa-video"></i> <span>${escapeHtml(t('character.videoCall'))}</span>
+    </button>`;
 
     content.innerHTML = `
         <div class="anima-character__card-wrapper">
@@ -1192,18 +1186,7 @@ function renderCharacterView() {
         </div>
     `;
 
-    if (hasModel) {
-        content.querySelector('#anima_video_call_btn')?.addEventListener('click', () => void startVideoCall());
-    } else if (creationError) {
-        content.querySelector('#anima_retry_create_btn')?.addEventListener('click', () => {
-            creationError = '';
-            renderCharacterView();
-            void autoCreateAvatarForCharacter();
-        });
-    } else if (!isGenerating && !isCreatingAvatar) {
-        // Auto-create digital human for this character
-        void autoCreateAvatarForCharacter();
-    }
+    content.querySelector('#anima_video_call_btn')?.addEventListener('click', () => void inviteVideoCall());
 }
 
 /** @param {string} avatarUrl */
@@ -1269,6 +1252,131 @@ async function startVideoCall() {
 }
 
 /**
+ * Show the Telegram-style calling UI and create the digital human if needed.
+ * When generation completes, auto-start the video call.
+ */
+async function inviteVideoCall() {
+    const ctx = getContext();
+    const cid = parseCid(ctx.characterId) >= 0 ? parseCid(ctx.characterId) : null;
+    const ch = cid !== null ? ctx.characters?.[cid] : null;
+
+    if (!ch) {
+        getToastr().error(t('character.noChat'));
+        return;
+    }
+    if (!ch.avatar) {
+        getToastr().error(t('character.invalidCard'));
+        return;
+    }
+
+    const meta = getBindingMeta();
+    const binding = getBinding(meta.key);
+    const bindingOk = binding.sourceAvatar === ch.avatar && binding.remoteAvatarId && binding.modelUrl;
+
+    // Show calling UI
+    showCallingView(ch);
+
+    if (bindingOk) {
+        // Model is ready — go straight to video
+        void startVideoCall();
+        return;
+    }
+
+    showCallingHint();
+
+    // Need to create / wait for avatar generation
+    setCallingStatus(t('character.connecting'));
+    creationError = '';
+    await autoCreateAvatarForCharacter();
+
+    // If creation failed, show error in calling view
+    if (creationError) {
+        setCallingStatus(creationError, true);
+    }
+    // Otherwise watchSingleAvatarGeneration will call onGenerationReadyInCallingView when done
+}
+
+/**
+ * Populate and show the calling view.
+ * @param {{ name?: string, avatar?: string }} ch
+ */
+function showCallingView(ch) {
+    if (!popupEl) return;
+    const name = ch.name || 'Character';
+    const avatarUrl = ch.avatar ? `/characters/${ch.avatar}` : '';
+    const avatarImg = /** @type {HTMLImageElement|null} */ (popupEl.querySelector('#anima_calling_avatar'));
+    const hintEl = popupEl.querySelector('#anima_calling_hint');
+    const nameEl = popupEl.querySelector('#anima_calling_name');
+    const statusEl = popupEl.querySelector('#anima_calling_status');
+    if (avatarImg) {
+        avatarImg.src = avatarUrl;
+        avatarImg.alt = name;
+    }
+    if (hintEl) {
+        hintEl.textContent = t('calling.firstGenerationHint');
+        hintEl.classList.add('is-hidden');
+    }
+    if (nameEl) nameEl.textContent = name;
+    if (statusEl) {
+        statusEl.textContent = t('character.connecting');
+        statusEl.classList.remove('is-error');
+    }
+    showView('calling');
+}
+
+function showCallingHint() {
+    if (!popupEl) return;
+    const hintEl = popupEl.querySelector('#anima_calling_hint');
+    if (!hintEl) return;
+    hintEl.textContent = t('calling.firstGenerationHint');
+    hintEl.classList.remove('is-hidden');
+    if (callingHintTimer !== null) {
+        clearTimeout(callingHintTimer);
+    }
+    callingHintTimer = window.setTimeout(() => {
+        hideCallingHint();
+    }, 5000);
+}
+
+function hideCallingHint() {
+    if (callingHintTimer !== null) {
+        clearTimeout(callingHintTimer);
+        callingHintTimer = null;
+    }
+    if (!popupEl) return;
+    popupEl.querySelector('#anima_calling_hint')?.classList.add('is-hidden');
+}
+
+/**
+ * Update the status text on the calling view.
+ * @param {string} text
+ * @param {boolean} [isError]
+ */
+function setCallingStatus(text, isError) {
+    if (!popupEl) return;
+    const statusEl = popupEl.querySelector('#anima_calling_status');
+    if (statusEl) {
+        statusEl.textContent = text;
+        statusEl.classList.toggle('is-error', Boolean(isError));
+    }
+}
+
+/**
+ * Called when generation completes while the calling view is shown.
+ * Auto-starts the video call.
+ */
+function onGenerationReadyInCallingView() {
+    if (currentView !== 'calling') return;
+    setCallingStatus(t('character.connecting'));
+    // Small delay so user sees the "ready" text, then start
+    setTimeout(() => {
+        if (currentView === 'calling') {
+            void startVideoCall();
+        }
+    }, 600);
+}
+
+/**
  * Auto-create a digital human for the currently selected character.
  * Guards against double invocation.
  */
@@ -1306,10 +1414,12 @@ async function autoCreateAvatarForCharacter() {
 async function generateAvatarForCharacter(character, meta) {
     try {
         const config = getConfig();
+        const displayName = character.name || 'Avatar';
+        const remoteName = makeRemoteAvatarName(displayName);
         const avatarUrl = `/characters/${character.avatar}`;
         const file = await fetchCharacterImageAsFile(avatarUrl);
 
-        const avatarId = await preGeneration(character.name || 'Avatar', config);
+        const avatarId = await preGeneration(remoteName, config);
         await avatarsUpdate({ avatarsId: avatarId, selectTemplateImg: 'custom-style' }, config);
 
         const formData = new FormData();
@@ -1320,7 +1430,6 @@ async function generateAvatarForCharacter(character, meta) {
             photoUrl = await avatarsUpload(formData, config);
         } catch (uploadErr) {
             creationError = errMsg(uploadErr) || t('character.invalidCard');
-            renderCharacterView();
             return;
         }
 
@@ -1330,11 +1439,10 @@ async function generateAvatarForCharacter(character, meta) {
             await validateImage(vForm, config);
         } catch (valErr) {
             creationError = errMsg(valErr) || t('character.noFace');
-            renderCharacterView();
             return;
         }
 
-        await avatarsUpdate({ avatarsId: avatarId, nickname: character.name || 'Avatar' }, config);
+        await avatarsUpdate({ avatarsId: avatarId, nickname: remoteName }, config);
 
         let langId = '', vId = '';
         try {
@@ -1360,7 +1468,7 @@ async function generateAvatarForCharacter(character, meta) {
         await modelGenerate(genForm, config);
 
         setBinding(meta.key, {
-            avatarLabel: character.name || 'Avatar',
+            avatarLabel: displayName,
             posterUrl: avatarUrl,
             modelUrl: '',
             modelId: '',
@@ -1371,12 +1479,10 @@ async function generateAvatarForCharacter(character, meta) {
             sourceAvatar: character.avatar,
         });
 
-        // Stay on character view, show generating status
-        renderCharacterView();
+        // Generation submitted — watch SSE for completion
         watchSingleAvatarGeneration(avatarId, meta.key);
     } catch (err) {
         creationError = errMsg(err) || t('character.invalidCard');
-        renderCharacterView();
     }
 }
 
@@ -1399,13 +1505,18 @@ function watchSingleAvatarGeneration(avatarId, bindingKey) {
                     if (detail) {
                         const existing = getBinding(bindingKey);
                         const bindingData = buildBindingData(detail);
+                        if (existing.avatarLabel) {
+                            bindingData.avatarLabel = existing.avatarLabel;
+                        }
                         // Preserve sourceAvatar from the original binding
                         if (existing.sourceAvatar) {
                             bindingData.sourceAvatar = existing.sourceAvatar;
                         }
                         setBinding(bindingKey, bindingData);
-                        // Refresh character view to show ready state
-                        if (currentView === 'character') {
+                        // If in calling view, auto-start video call
+                        if (currentView === 'calling') {
+                            onGenerationReadyInCallingView();
+                        } else if (currentView === 'character') {
                             renderCharacterView();
                         }
                     }
@@ -1414,8 +1525,12 @@ function watchSingleAvatarGeneration(avatarId, bindingKey) {
             }
             if (status.includes('error')) {
                 closeGenerationSSE(avatarId);
-                getToastr().error(t('character.generationFailed'));
-                renderCharacterView();
+                if (currentView === 'calling') {
+                    setCallingStatus(t('character.generationFailed'), true);
+                } else {
+                    getToastr().error(t('character.generationFailed'));
+                    renderCharacterView();
+                }
             }
         },
         onError: () => {
@@ -1821,12 +1936,21 @@ function bindSTEvents() {
         replyEventId = 0;
 
         // If runtime is active and character changes, auto-close
-        if (currentView === 'runtime' && runtimeCharacterId !== null) {
+        if ((currentView === 'runtime' || currentView === 'calling') && runtimeCharacterId !== null) {
             const newCid = parseCid(ctx.characterId);
             if (newCid !== runtimeCharacterId) {
                 closePopup();
                 return;
             }
+        }
+
+        // If in calling view without runtimeCharacterId, cancel calling
+        if (currentView === 'calling') {
+            closeAllGenerationSSE();
+            isCreatingAvatar = false;
+            creationError = '';
+            showCharacterView();
+            return;
         }
 
         activeBindingKey = undefined;
@@ -2682,6 +2806,7 @@ function closePopup() {
     destroyRuntimeIframe();
     disableTtsIntercept();
     closeAllGenerationSSE();
+    hideCallingHint();
     runtimeCharacterId = null;
     isCreatingAvatar = false;
     creationError = '';

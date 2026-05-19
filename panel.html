@@ -29,6 +29,18 @@
         </div>
     </div>
 
+    <!-- ========== VIEW: Calling (Telegram-style) ========== -->
+    <div class="anima-view" id="anima_view_calling" style="display:none">
+        <div class="anima-calling">
+            <div id="anima_calling_hint" class="anima-calling__hint is-hidden" data-i18n="calling.firstGenerationHint">首次生成需要等待五分钟</div>
+            <div class="anima-calling__avatar-ring">
+                <img id="anima_calling_avatar" class="anima-calling__avatar" src="" alt="" />
+            </div>
+            <div id="anima_calling_name" class="anima-calling__name"></div>
+            <div id="anima_calling_status" class="anima-calling__status" data-i18n="character.connecting">视频电话正在接通中...</div>
+        </div>
+    </div>
+
     <!-- ========== VIEW: Runtime (3D avatar display) ========== -->
     <div class="anima-view" id="anima_view_runtime" style="display:none">
         <div class="anima-runtime__header">
@@ -42,7 +54,7 @@
 
         <div class="anima-runtime__body">
             <div class="anima-runtime__stage">
-                <div id="anima_runtime_empty" class="anima-runtime__empty" data-i18n="character.connecting">视频接通中...</div>
+                <div id="anima_runtime_empty" class="anima-runtime__empty" data-i18n="character.connecting">视频电话正在接通中...</div>
                 <iframe id="anima_runtime_frame" class="anima-runtime__frame"
                     sandbox="allow-scripts allow-same-origin allow-popups"
                     allow="autoplay; camera; microphone; clipboard-read; clipboard-write"

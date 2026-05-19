@@ -48,7 +48,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
     display: none;
     filter: drop-shadow(0 0 40px rgba(0,0,0,0.5));
 }
-/* ── Loading center (Anima style) ── */
+/* ── Loading center (Telegram-style invite) ── */
 .loading-center {
     position: absolute;
     inset: 0;
@@ -58,67 +58,77 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding-bottom: 36px;
+    gap: 12px;
+    padding: 32px 16px;
+    background: linear-gradient(160deg, #1a1a3e 0%, #0d0d2b 50%, #0a0a1f 100%);
     z-index: 20;
 }
 .loading-center.is-hidden { display: none; }
+.loading-avatar-wrap {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    animation: loading-avatar-pulse 2s ease-in-out infinite;
+}
+.loading-avatar-wrap::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 2px solid rgba(138, 120, 200, 0.3);
+    animation: loading-avatar-ring 2s ease-in-out infinite;
+}
+.loading-avatar-wrap::after {
+    content: '';
+    position: absolute;
+    inset: -18px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(138, 120, 200, 0.15);
+    animation: loading-avatar-ring 2s ease-in-out infinite 0.3s;
+}
 .loading-avatar {
     width: 140px;
     height: 140px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid rgba(255,255,255,0.2);
-    box-shadow: 0 0 28px rgba(37,99,235,0.28);
-    background: #111;
+    background: linear-gradient(135deg, #7c6bbd 0%, #9b7fd4 100%);
 }
 .loading-avatar.is-hidden { display: none; }
 .loading-name {
-    font-size: 16px;
-    font-weight: 700;
+    font-size: 22px;
+    font-weight: 600;
     color: #f5f5f5;
+    margin-top: 12px;
 }
 .loading-status {
-    font-size: 12px;
-    color: #34d399;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-.loading-status::before {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #34d399;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.55);
 }
 .loading-mask {
     position: absolute;
     inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: radial-gradient(ellipse at center, rgba(0,0,0,0.28), rgba(0,0,0,0.55));
-    backdrop-filter: blur(2px);
+    background: transparent;
     z-index: 21;
     pointer-events: none;
 }
 .loading-mask.is-hidden { display: none; }
 .loading-spinner {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.22);
-    border-top-color: rgba(255,255,255,0.9);
-    animation: spin 0.9s linear infinite;
+    display: none;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
 .loading-text {
-    font-size: 12px;
-    color: rgba(255,255,255,0.9);
-    font-weight: 600;
+    display: none;
+}
+@keyframes loading-avatar-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+}
+@keyframes loading-avatar-ring {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.5; }
 }
 
 /* ── Speech Bubble (Anima style — white, positioned right) ── */
@@ -727,15 +737,17 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
             <canvas id="stage_canvas"></canvas>
             <img id="stage_poster" alt="Avatar" />
         </div>
-        <!-- Loading center (Anima style) -->
+        <!-- Loading center (Telegram-style invite) -->
         <div class="loading-center" id="loading_center">
-            <img class="loading-avatar" id="loading_avatar" alt="" />
+            <div class="loading-avatar-wrap">
+                <img class="loading-avatar" id="loading_avatar" alt="" />
+            </div>
             <div class="loading-name" id="loading_name">Avatar</div>
-            <div class="loading-status">Online</div>
+            <div class="loading-status">视频电话正在接通中...</div>
         </div>
         <div class="loading-mask" id="loading_mask">
             <div class="loading-spinner"></div>
-            <div class="loading-text">Video connecting...</div>
+            <div class="loading-text">视频电话正在接通中...</div>
         </div>
         <!-- Speech bubble (Anima style) -->
         <div class="speech-bubble" id="speech_bubble">
