@@ -709,6 +709,28 @@ function buildBindingData(detail) {
 }
 
 /**
+ * Refresh a binding from the remote avatar detail and report whether the model is already ready.
+ * @param {string} bindingKey
+ * @param {string} avatarId
+ * @returns {Promise<boolean>}
+ */
+async function syncBindingFromRemoteAvatar(bindingKey, avatarId) {
+    const detail = await avatarGet(avatarId, getConfig());
+    if (!detail) return false;
+
+    const existing = getBinding(bindingKey);
+    const bindingData = buildBindingData(detail);
+    if (existing.avatarLabel) {
+        bindingData.avatarLabel = existing.avatarLabel;
+    }
+    if (existing.sourceAvatar) {
+        bindingData.sourceAvatar = existing.sourceAvatar;
+    }
+    setBinding(bindingKey, bindingData);
+    return Boolean(bindingData.modelUrl);
+}
+
+/**
  * Single-click handler: if avatar is already bound → open runtime directly.
  * If not bound → show character selector first, then open runtime.
  * @param {string} avatarId
@@ -1131,7 +1153,17 @@ function resumeGenerationWatch() {
     const binding = getBinding(meta.key);
     // Only resume if binding was created from this character's avatar
     if (binding.remoteAvatarId && !binding.modelUrl && ch && binding.sourceAvatar === ch.avatar) {
-        watchSingleAvatarGeneration(binding.remoteAvatarId, meta.key);
+        void syncBindingFromRemoteAvatar(meta.key, binding.remoteAvatarId)
+            .then((isReady) => {
+                if (isReady) {
+                    if (currentView === 'character') renderCharacterView();
+                    return;
+                }
+                watchSingleAvatarGeneration(binding.remoteAvatarId, meta.key);
+            })
+            .catch(() => {
+                watchSingleAvatarGeneration(binding.remoteAvatarId, meta.key);
+            });
     }
 }
 
@@ -1398,6 +1430,19 @@ async function autoCreateAvatarForCharacter() {
         clearBinding(meta.key);
     }
 
+    // If this character already has a generation in progress, just resume watching it.
+    if (existing.remoteAvatarId && existing.sourceAvatar === ch.avatar && !existing.modelUrl) {
+        try {
+            const isReady = await syncBindingFromRemoteAvatar(meta.key, existing.remoteAvatarId);
+            if (isReady) {
+                if (currentView === 'character') renderCharacterView();
+                return;
+            }
+        } catch { /* fall through to SSE resume */ }
+        watchSingleAvatarGeneration(existing.remoteAvatarId, meta.key);
+        return;
+    }
+
     isCreatingAvatar = true;
     try {
         await generateAvatarForCharacter(ch, meta);
@@ -1501,18 +1546,8 @@ function watchSingleAvatarGeneration(avatarId, bindingKey) {
             if (status === 'model-completed') {
                 closeGenerationSSE(avatarId);
                 try {
-                    const detail = await avatarGet(avatarId, getConfig());
-                    if (detail) {
-                        const existing = getBinding(bindingKey);
-                        const bindingData = buildBindingData(detail);
-                        if (existing.avatarLabel) {
-                            bindingData.avatarLabel = existing.avatarLabel;
-                        }
-                        // Preserve sourceAvatar from the original binding
-                        if (existing.sourceAvatar) {
-                            bindingData.sourceAvatar = existing.sourceAvatar;
-                        }
-                        setBinding(bindingKey, bindingData);
+                    const isReady = await syncBindingFromRemoteAvatar(bindingKey, avatarId);
+                    if (isReady) {
                         // If in calling view, auto-start video call
                         if (currentView === 'calling') {
                             onGenerationReadyInCallingView();
