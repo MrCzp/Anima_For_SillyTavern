@@ -78,7 +78,7 @@ const TRANSLATIONS = {
         'create.discardConfirm': 'Discard this avatar draft?',
 
         // Runtime
-        'runtime.loading': 'Loading avatar...',
+        'runtime.loading': 'Video connecting...',
         'runtime.noModel': 'No model URL. Select an avatar with a ready model.',
         'runtime.defaultName': 'Digital Human',
         'runtime.backTitle': 'Back to avatars',
@@ -102,6 +102,10 @@ const TRANSLATIONS = {
         'settings.autoLipSync': 'Auto lip-sync on new replies',
         'settings.useStTts': 'Use SillyTavern TTS audio for lip-sync',
         'settings.useStTtsHint': 'When enabled, intercepts ST TTS audio instead of using Anima\'s built-in TTS. ST TTS playback will be suppressed — audio plays through the avatar only.',
+        'settings.resetAccount': 'Reset Account',
+        'settings.resetAccountHint': 'Clear all login credentials and bindings. A new account will be auto-created on next open.',
+        'settings.resetConfirm': 'Are you sure? This will clear all login info and avatar bindings.',
+        'settings.accountLabel': 'Current account:',
         'settings.authToken': 'Auth Token (read-only)',
         'settings.probe': 'Probe API',
         'settings.probing': 'Probing...',
@@ -125,6 +129,19 @@ const TRANSLATIONS = {
         'bind.noChars': 'No characters found',
         'bind.current': 'current',
         'bind.bound': '[bound]',
+
+        // Character
+        'character.noChat': 'Please open a character chat first.',
+        'character.videoCall': 'Invite Video Call',
+        'character.createAvatar': 'Create Digital Human',
+        'character.generating': 'Generating...',
+        'character.generatingProgress': 'Generating {0}%',
+        'character.connecting': 'Video connecting...',
+        'character.invalidCard': 'This character card cannot be used for video chat.',
+        'character.noFace': 'No face detected in the character image.',
+        'character.generationFailed': 'Digital human generation failed.',
+        'character.ready': 'Digital human ready',
+        'character.retry': 'Retry',
 
         // Common
         'common.cancel': 'Cancel',
@@ -205,7 +222,7 @@ const TRANSLATIONS = {
         'create.discardConfirm': '放弃当前数字人草稿？',
 
         // Runtime
-        'runtime.loading': '加载数字人中...',
+        'runtime.loading': '视频接通中...',
         'runtime.noModel': '无模型地址。请选择一个已就绪的形象。',
         'runtime.defaultName': '数字人',
         'runtime.backTitle': '返回形象列表',
@@ -229,6 +246,10 @@ const TRANSLATIONS = {
         'settings.autoLipSync': '新回复时自动唇形同步',
         'settings.useStTts': '使用 SillyTavern TTS 音频进行唇形同步',
         'settings.useStTtsHint': '启用后，将拦截 ST TTS 扩展的音频数据来驱动口型动画，而不使用 Anima 自带的 TTS。ST TTS 的播放将被静音，音频仅通过数字人播放。',
+        'settings.resetAccount': '重置账号',
+        'settings.resetAccountHint': '清除所有登录信息和数字人绑定。下次打开时将自动创建新账号。',
+        'settings.resetConfirm': '确定要重置吗？这将清除所有登录信息和数字人绑定。',
+        'settings.accountLabel': '当前账号：',
         'settings.authToken': '认证令牌（只读）',
         'settings.probe': '测试 API',
         'settings.probing': '测试中...',
@@ -252,6 +273,19 @@ const TRANSLATIONS = {
         'bind.noChars': '未找到角色',
         'bind.current': '当前',
         'bind.bound': '[已绑定]',
+
+        // Character
+        'character.noChat': '请先打开一个角色聊天。',
+        'character.videoCall': '邀请视频通话',
+        'character.createAvatar': '创建数字人',
+        'character.generating': '生成中...',
+        'character.generatingProgress': '生成中 {0}%',
+        'character.connecting': '视频接通中...',
+        'character.invalidCard': '该角色卡无法开启视频聊天。',
+        'character.noFace': '未在角色图片中检测到人脸。',
+        'character.generationFailed': '数字人生成失败。',
+        'character.ready': '数字人已就绪',
+        'character.retry': '重试',
 
         // Common
         'common.cancel': '取消',

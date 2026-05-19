@@ -106,6 +106,14 @@ function getConfig() {
 
 function saveSettings() { getContext().saveSettingsDebounced(); }
 
+/** Parse SillyTavern characterId (may be string, number, or undefined) to a numeric index. Returns -1 if invalid.
+ * @param {*} raw */
+function parseCid(raw) {
+    if (raw == null) return -1;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : -1;
+}
+
 /**
  * Get the avatar filename (without extension) for a character.
  * @param {number|null} [cid]
@@ -113,7 +121,7 @@ function saveSettings() { getContext().saveSettingsDebounced(); }
  */
 function getCharaFilename(cid = null) {
     const ctx = getContext();
-    const id = cid ?? (typeof ctx.characterId === 'number' ? ctx.characterId : -1);
+    const id = cid ?? parseCid(ctx.characterId);
     const avatar = ctx.characters?.[id]?.avatar;
     return avatar ? String(avatar).replace(/\.[^/.]+$/, '') : null;
 }
@@ -121,7 +129,7 @@ function getCharaFilename(cid = null) {
 /** @returns {{ key: string, label: string, hasChat: boolean }} */
 function getBindingMeta() {
     const ctx = getContext();
-    const cid = typeof ctx.characterId === 'number' && ctx.characterId >= 0 ? ctx.characterId : null;
+    const cid = parseCid(ctx.characterId) >= 0 ? parseCid(ctx.characterId) : null;
     const ch = cid !== null ? ctx.characters?.[cid] : null;
     const groups = Array.isArray(ctx.groups) ? ctx.groups : [];
     const grp = ctx.groupId ? groups.find(g => g.id == ctx.groupId) : null;
@@ -184,6 +192,7 @@ function getBinding(key) {
         avatarLabel: b.avatarLabel || '', posterUrl: b.posterUrl || '', modelUrl: b.modelUrl || '',
         modelId: b.modelId || '', voiceId: b.voiceId || '', remoteAvatarId: b.remoteAvatarId || '',
         remoteLanguageId: b.remoteLanguageId || '', remoteVoiceName: b.remoteVoiceName || '',
+        sourceAvatar: b.sourceAvatar || '',
     };
 }
 
@@ -223,6 +232,10 @@ let generationSSERetryTimers = new Map();
 let createWizardState = null;
 /** @type {number} */
 let replyEventId = 0;
+/** @type {number|null} */
+let runtimeCharacterId = null;
+let isCreatingAvatar = false;
+let creationError = '';
 
 /**
  * @typedef {{ audioBase64: string, text: string, mimeType?: string }} ExternalTtsQueueItem
@@ -379,17 +392,9 @@ function bindHiddenCameraMessageSupport() {
 
 /* ───────── Login ───────── */
 
-/** After successful auth, decide whether to show avatars grid or jump to runtime. */
+/** After successful auth, show the character view. */
 function navigateAfterLogin() {
-    const meta = getBindingMeta();
-    const binding = getBinding(meta.key);
-    if (meta.hasChat && binding.remoteAvatarId) {
-        showView('runtime');
-        initRuntime();
-    } else {
-        showView('avatars');
-        void loadAvatarGrid();
-    }
+    showCharacterView();
 }
 
 async function tryAutoLogin() {
@@ -401,26 +406,27 @@ async function tryAutoLogin() {
             return;
         }
     }
-    if (s.authMailbox && s.authPassword) {
-        setLoginStatus(t('login.autoSignIn'));
-        try {
-            await doLogin(s.authMailbox, s.authPassword);
-            return;
-        } catch { /* fall through to login view */ }
+    // Auto-generate credentials if none exist
+    if (!s.authMailbox || !s.authPassword) {
+        const id = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+        s.authMailbox = `st_${id}@anima.auto`;
+        s.authPassword = crypto.randomUUID();
+        saveSettings();
     }
-    showView('login');
-    if (s.authMailbox && popupEl) {
-        const emailInput = /** @type {HTMLInputElement|null} */ (popupEl.querySelector('#anima_login_email'));
-        if (emailInput) emailInput.value = s.authMailbox;
+    try {
+        await doLogin(s.authMailbox, s.authPassword);
+    } catch (err) {
+        setLoginStatus(errMsg(err), true);
     }
 }
 
 /** @param {string} text @param {boolean} [isError] */
 function setLoginStatus(text, isError = false) {
     if (!popupEl) return;
-    const el = popupEl.querySelector('#anima_login_status');
+    const el = /** @type {HTMLElement|null} */ (popupEl.querySelector('#anima_login_status'));
     if (!el) return;
     el.textContent = text;
+    el.style.display = text ? '' : 'none';
     el.classList.toggle('is-error', isError);
 }
 
@@ -455,11 +461,25 @@ async function doLogin(mailbox, password) {
 function doLogout() {
     const s = ensureSettings();
     s.authToken = '';
+    s.authMailbox = '';
     s.authPassword = '';
     s.authUserId = '';
+    s.bindings = {};
     saveSettings();
     showView('login');
     getToastr().info(t('login.loggedOut'));
+}
+
+function updateAccountInfo() {
+    if (!popupEl) return;
+    const el = popupEl.querySelector('#anima_account_info');
+    if (!el) return;
+    const s = ensureSettings();
+    if (s.authMailbox) {
+        el.textContent = `${t('settings.accountLabel')} ${s.authMailbox}`;
+    } else {
+        el.textContent = '';
+    }
 }
 
 /* ───────── Avatar Grid ───────── */
@@ -1083,6 +1103,328 @@ function watchGeneratingAvatars() {
         .forEach(closeGenerationSSE);
 }
 
+/* ───────── Character View ───────── */
+
+function showCharacterView() {
+    if (!popupEl) return;
+    showView('character');
+    renderCharacterView();
+    resumeGenerationWatch();
+}
+
+/** Resume SSE watch for any in-progress avatar generation for the current character. */
+function resumeGenerationWatch() {
+    const meta = getBindingMeta();
+    if (!meta.hasChat) return;
+    const ctx = getContext();
+    const cid = parseCid(ctx.characterId) >= 0 ? parseCid(ctx.characterId) : null;
+    const ch = cid !== null ? ctx.characters?.[cid] : null;
+    const binding = getBinding(meta.key);
+    // Only resume if binding was created from this character's avatar
+    if (binding.remoteAvatarId && !binding.modelUrl && ch && binding.sourceAvatar === ch.avatar) {
+        watchSingleAvatarGeneration(binding.remoteAvatarId, meta.key);
+    }
+}
+
+function renderCharacterView() {
+    if (!popupEl) return;
+    const content = popupEl.querySelector('#anima_character_content');
+    if (!content) return;
+
+    const ctx = getContext();
+    const cid = parseCid(ctx.characterId) >= 0 ? parseCid(ctx.characterId) : null;
+    const ch = cid !== null ? ctx.characters?.[cid] : null;
+
+    if (!ch) {
+        content.innerHTML = `<div class="anima-character__empty">${escapeHtml(t('character.noChat'))}</div>`;
+        return;
+    }
+
+    const name = ch.name || 'Character';
+    const avatarUrl = ch.avatar ? `/characters/${ch.avatar}` : '';
+    const imgHtml = avatarUrl
+        ? `<img class="anima-avatar-card__img" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(name)}" loading="lazy" />`
+        : `<div class="anima-avatar-card__img-placeholder"><i class="fa-solid fa-user"></i></div>`;
+
+    const meta = getBindingMeta();
+    const binding = getBinding(meta.key);
+    // Only treat binding as valid if it was created from THIS character's avatar
+    const bindingMatchesCharacter = binding.sourceAvatar && binding.sourceAvatar === ch.avatar;
+    const hasModel = bindingMatchesCharacter && Boolean(binding.remoteAvatarId && binding.modelUrl);
+    const isGenerating = bindingMatchesCharacter && Boolean(binding.remoteAvatarId && !binding.modelUrl);
+
+    let statusHtml = '';
+    let buttonHtml = '';
+
+    if (hasModel) {
+        statusHtml = `<div class="anima-character__status anima-character__status--ready"><i class="fa-solid fa-circle-check"></i> ${escapeHtml(t('character.ready'))}</div>`;
+        buttonHtml = `<button id="anima_video_call_btn" class="anima-btn anima-btn--primary anima-btn--wide anima-btn--video-call">
+            <i class="fa-solid fa-video"></i> <span>${escapeHtml(t('character.videoCall'))}</span>
+        </button>`;
+    } else if (creationError) {
+        statusHtml = `<div class="anima-character__status anima-character__status--error"><i class="fa-solid fa-circle-xmark"></i> ${escapeHtml(creationError)}</div>`;
+        buttonHtml = `<button id="anima_retry_create_btn" class="anima-btn anima-btn--wide anima-btn--create-avatar">
+            <i class="fa-solid fa-rotate-right"></i> <span>${escapeHtml(t('character.retry'))}</span>
+        </button>`;
+    } else if (isGenerating || isCreatingAvatar) {
+        statusHtml = `<div class="anima-character__status anima-character__status--generating"><i class="fa-solid fa-spinner fa-spin"></i> ${escapeHtml(t('character.generating'))}</div>`;
+        buttonHtml = `<button class="anima-btn anima-btn--primary anima-btn--wide anima-btn--video-call" disabled>
+            <i class="fa-solid fa-video"></i> <span>${escapeHtml(t('character.videoCall'))}</span>
+        </button>`;
+    } else {
+        // No valid binding — auto-create will be triggered after render
+        statusHtml = `<div class="anima-character__status anima-character__status--generating"><i class="fa-solid fa-spinner fa-spin"></i> ${escapeHtml(t('character.generating'))}</div>`;
+        buttonHtml = `<button class="anima-btn anima-btn--primary anima-btn--wide anima-btn--video-call" disabled>
+            <i class="fa-solid fa-video"></i> <span>${escapeHtml(t('character.videoCall'))}</span>
+        </button>`;
+    }
+
+    content.innerHTML = `
+        <div class="anima-character__card-wrapper">
+            <div class="anima-avatar-card anima-character__single-card">
+                ${imgHtml}
+                <div class="anima-avatar-card__info">
+                    <div class="anima-avatar-card__name">${escapeHtml(name)}</div>
+                    ${statusHtml}
+                </div>
+            </div>
+            ${buttonHtml}
+        </div>
+    `;
+
+    if (hasModel) {
+        content.querySelector('#anima_video_call_btn')?.addEventListener('click', () => void startVideoCall());
+    } else if (creationError) {
+        content.querySelector('#anima_retry_create_btn')?.addEventListener('click', () => {
+            creationError = '';
+            renderCharacterView();
+            void autoCreateAvatarForCharacter();
+        });
+    } else if (!isGenerating && !isCreatingAvatar) {
+        // Auto-create digital human for this character
+        void autoCreateAvatarForCharacter();
+    }
+}
+
+/** @param {string} avatarUrl */
+async function fetchCharacterImageAsFile(avatarUrl) {
+    const response = await fetch(avatarUrl);
+    if (!response.ok) throw new Error('Failed to fetch character image');
+    const blob = await response.blob();
+    const filename = avatarUrl.split('/').pop() || 'avatar.png';
+    const ext = (filename.split('.').pop() || 'png').toLowerCase();
+    const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+    return new File([blob], filename, { type: mimeType });
+}
+
+function showRuntimeConnecting() {
+    if (!popupEl) return;
+    const empty = popupEl.querySelector('#anima_runtime_empty');
+    const frame = /** @type {HTMLIFrameElement|null} */ (popupEl.querySelector('#anima_runtime_frame'));
+    const nameEl = popupEl.querySelector('#anima_runtime_avatar_name');
+    if (frame) { /** @type {HTMLElement} */ (frame).style.display = 'none'; }
+    if (empty) {
+        /** @type {HTMLElement} */ (empty).style.display = '';
+        empty.innerHTML = `
+            <div class="anima-connecting">
+                <div class="anima-connecting__spinner"></div>
+                <div class="anima-connecting__text">${escapeHtml(t('character.connecting'))}</div>
+            </div>
+        `;
+    }
+    const ctx = getContext();
+    const cid = parseCid(ctx.characterId) >= 0 ? parseCid(ctx.characterId) : null;
+    const ch = cid !== null ? ctx.characters?.[cid] : null;
+    if (nameEl && ch) nameEl.textContent = ch.name || t('runtime.defaultName');
+}
+
+async function startVideoCall() {
+    const ctx = getContext();
+    const cid = parseCid(ctx.characterId) >= 0 ? parseCid(ctx.characterId) : null;
+    const ch = cid !== null ? ctx.characters?.[cid] : null;
+
+    if (!ch) {
+        getToastr().error(t('character.noChat'));
+        return;
+    }
+
+    if (!ch.avatar) {
+        getToastr().error(t('character.invalidCard'));
+        return;
+    }
+
+    const meta = getBindingMeta();
+    const binding = getBinding(meta.key);
+
+    // Only allow video call when model is ready AND created from this character
+    if (!binding.remoteAvatarId || !binding.modelUrl || binding.sourceAvatar !== ch.avatar) {
+        getToastr().error(t('character.generationFailed'));
+        return;
+    }
+
+    runtimeCharacterId = cid;
+    showView('runtime');
+    showRuntimeConnecting();
+    initRuntime();
+}
+
+/**
+ * Auto-create a digital human for the currently selected character.
+ * Guards against double invocation.
+ */
+async function autoCreateAvatarForCharacter() {
+    if (isCreatingAvatar) return;
+
+    const ctx = getContext();
+    const cid = parseCid(ctx.characterId) >= 0 ? parseCid(ctx.characterId) : null;
+    const ch = cid !== null ? ctx.characters?.[cid] : null;
+
+    if (!ch || !ch.avatar) {
+        return;
+    }
+
+    const meta = getBindingMeta();
+    // Clear any stale binding from a different source
+    const existing = getBinding(meta.key);
+    if (existing.remoteAvatarId && existing.sourceAvatar !== ch.avatar) {
+        clearBinding(meta.key);
+    }
+
+    isCreatingAvatar = true;
+    try {
+        await generateAvatarForCharacter(ch, meta);
+    } finally {
+        isCreatingAvatar = false;
+    }
+}
+
+/**
+ * Generate a digital human from the character's avatar image.
+ * @param {any} character
+ * @param {{ key: string, label: string, hasChat: boolean }} meta
+ */
+async function generateAvatarForCharacter(character, meta) {
+    try {
+        const config = getConfig();
+        const avatarUrl = `/characters/${character.avatar}`;
+        const file = await fetchCharacterImageAsFile(avatarUrl);
+
+        const avatarId = await preGeneration(character.name || 'Avatar', config);
+        await avatarsUpdate({ avatarsId: avatarId, selectTemplateImg: 'custom-style' }, config);
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('avatarsId', avatarId);
+        let photoUrl;
+        try {
+            photoUrl = await avatarsUpload(formData, config);
+        } catch (uploadErr) {
+            creationError = errMsg(uploadErr) || t('character.invalidCard');
+            renderCharacterView();
+            return;
+        }
+
+        const vForm = new FormData();
+        vForm.append('file', file);
+        try {
+            await validateImage(vForm, config);
+        } catch (valErr) {
+            creationError = errMsg(valErr) || t('character.noFace');
+            renderCharacterView();
+            return;
+        }
+
+        await avatarsUpdate({ avatarsId: avatarId, nickname: character.name || 'Avatar' }, config);
+
+        let langId = '', vId = '';
+        try {
+            const languages = await audioLanguageList(config);
+            if (languages?.length) {
+                langId = String(languages[0].id || '');
+                const voices = await audioList(langId, config);
+                if (voices?.length) {
+                    vId = String(voices[0].id || voices[0].ttsId || '');
+                }
+            }
+        } catch { /* best effort */ }
+        if (langId && vId) {
+            await ttsUpdate({ avatarsId: avatarId, languageId: langId, ttsId: vId, action: 'add' }, config);
+        }
+
+        const genForm = new FormData();
+        genForm.append('avatarsId', avatarId);
+        if (photoUrl) genForm.append('url', photoUrl);
+        genForm.append('modelType', '0');
+        genForm.append('sex', '0');
+        genForm.append('video', '0');
+        await modelGenerate(genForm, config);
+
+        setBinding(meta.key, {
+            avatarLabel: character.name || 'Avatar',
+            posterUrl: avatarUrl,
+            modelUrl: '',
+            modelId: '',
+            voiceId: vId || ensureSettings().defaultVoiceId || '1',
+            remoteAvatarId: avatarId,
+            remoteLanguageId: langId,
+            remoteVoiceName: '',
+            sourceAvatar: character.avatar,
+        });
+
+        // Stay on character view, show generating status
+        renderCharacterView();
+        watchSingleAvatarGeneration(avatarId, meta.key);
+    } catch (err) {
+        creationError = errMsg(err) || t('character.invalidCard');
+        renderCharacterView();
+    }
+}
+
+/**
+ * Watch a single avatar's generation via SSE and load runtime when ready.
+ * @param {string} avatarId
+ * @param {string} bindingKey
+ */
+function watchSingleAvatarGeneration(avatarId, bindingKey) {
+    const userId = String(ensureSettings().authUserId || '').trim();
+    if (!userId) return;
+
+    closeGenerationSSE(avatarId);
+    generationSSEConnections.set(avatarId, openGenerationSSE(userId, avatarId, getConfig(), {
+        onStatus: async (status) => {
+            if (status === 'model-completed') {
+                closeGenerationSSE(avatarId);
+                try {
+                    const detail = await avatarGet(avatarId, getConfig());
+                    if (detail) {
+                        const existing = getBinding(bindingKey);
+                        const bindingData = buildBindingData(detail);
+                        // Preserve sourceAvatar from the original binding
+                        if (existing.sourceAvatar) {
+                            bindingData.sourceAvatar = existing.sourceAvatar;
+                        }
+                        setBinding(bindingKey, bindingData);
+                        // Refresh character view to show ready state
+                        if (currentView === 'character') {
+                            renderCharacterView();
+                        }
+                    }
+                } catch { /* ignore */ }
+                return;
+            }
+            if (status.includes('error')) {
+                closeGenerationSSE(avatarId);
+                getToastr().error(t('character.generationFailed'));
+                renderCharacterView();
+            }
+        },
+        onError: () => {
+            closeGenerationSSE(avatarId);
+            setTimeout(() => watchSingleAvatarGeneration(avatarId, bindingKey), 5000);
+        },
+    }));
+}
+
 /* ───────── Create Wizard ───────── */
 
 function initCreateWizard() {
@@ -1376,8 +1718,16 @@ function initRuntime(overrideKey) {
     }
 
     if (!binding.modelUrl && !binding.posterUrl) {
-        if (frame) frame.style.display = 'none';
-        if (empty) /** @type {HTMLElement} */ (empty).textContent = t('runtime.noModel');
+        if (frame) /** @type {HTMLElement} */ (frame).style.display = 'none';
+        if (empty) {
+            /** @type {HTMLElement} */ (empty).style.display = '';
+            empty.innerHTML = `
+                <div class="anima-connecting">
+                    <div class="anima-connecting__spinner"></div>
+                    <div class="anima-connecting__text">${escapeHtml(t('character.connecting'))}</div>
+                </div>
+            `;
+        }
         return;
     }
 
@@ -1469,27 +1819,22 @@ function bindSTEvents() {
     const onGenEnd = () => sendRuntimePayload();
     const onChatChanged = () => {
         replyEventId = 0;
-        activeBindingKey = undefined; // reset to use current character's binding
-        const meta = getBindingMeta();
-        const binding = getBinding(meta.key);
-        if (binding.remoteAvatarId) {
-            // This character has a bound avatar — auto-open popup and show runtime
-            if (!popupEl) openPopup(); // this also calls tryAutoLogin which navigates
-            else {
-                // Destroy old runtime before loading new avatar
-                stopRuntimeSync();
-                destroyRuntimeIframe();
-                showView('runtime');
-                initRuntime();
+
+        // If runtime is active and character changes, auto-close
+        if (currentView === 'runtime' && runtimeCharacterId !== null) {
+            const newCid = parseCid(ctx.characterId);
+            if (newCid !== runtimeCharacterId) {
+                closePopup();
+                return;
             }
-        } else {
-            // No binding — just refresh if runtime is showing
-            if (currentView === 'runtime') {
-                stopRuntimeSync();
-                destroyRuntimeIframe();
-                showView('avatars');
-                void loadAvatarGrid();
-            }
+        }
+
+        activeBindingKey = undefined;
+        creationError = '';
+
+        // If popup is open, refresh character view
+        if (popupEl && currentView === 'character') {
+            renderCharacterView();
         }
     };
 
@@ -2256,22 +2601,11 @@ function wireUpPopup() {
         saveSettings();
         if (popupEl) updateI18n(popupEl);
         // Re-render dynamic content for the current view
-        if (avatarListCache.length > 0) renderAvatarGrid();
+        if (currentView === 'character') renderCharacterView();
         if (currentView === 'runtime') {
             const nameEl = popupEl?.querySelector('#anima_runtime_avatar_name');
-            const empty = popupEl?.querySelector('#anima_runtime_empty');
             if (nameEl && !nameEl.textContent?.trim()) nameEl.textContent = t('runtime.defaultName');
-            if (empty && empty.textContent?.trim()) /** @type {HTMLElement} */ (empty).textContent = t('runtime.noModel');
             sendRuntimePayload();
-        }
-        if (currentView === 'create' && createWizardState) {
-            void loadCreateLanguages();
-            const voiceSelect = /** @type {HTMLSelectElement|null} */ (popupEl?.querySelector('#anima_create_voice'));
-            if (voiceSelect && !createWizardState.languageId) {
-                voiceSelect.innerHTML = `<option value="">${escapeHtml(t('create.voiceSelectLang'))}</option>`;
-            } else if (createWizardState.languageId) {
-                void loadCreateVoices(createWizardState.languageId);
-            }
         }
         // Update dynamic label
         const langBtn = popupEl?.querySelector('#anima_lang_toggle');
@@ -2284,91 +2618,12 @@ function wireUpPopup() {
         showView('settings');
     });
 
-    // ── Login ──
-    popupEl.querySelector('#anima_login_submit')?.addEventListener('click', async () => {
-        const email = getVal('#anima_login_email');
-        const pass = /** @type {HTMLInputElement|null} */ (popupEl?.querySelector('#anima_login_password'))?.value || '';
-        if (!email || !pass) { setLoginStatus(t('login.emailRequired'), true); return; }
-        setLoginStatus(t('login.signingIn'));
-        try { await doLogin(email, pass); } catch (error) { setLoginStatus(errMsg(error), true); }
-    });
-    popupEl.querySelector('#anima_login_password')?.addEventListener('keydown', (e) => {
-        if (/** @type {KeyboardEvent} */ (e).key === 'Enter') popupEl?.querySelector('#anima_login_submit')?.dispatchEvent(new Event('click'));
-    });
-
-    // ── Avatar tabs ──
-    popupEl.querySelectorAll('.anima-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            popupEl?.querySelectorAll('.anima-tab').forEach(tb => tb.classList.remove('anima-tab--active'));
-            tab.classList.add('anima-tab--active');
-            activeTab = tab.getAttribute('data-tab') || 'all';
-            renderAvatarGrid();
-        });
-    });
-
-    // ── Avatar actions ──
-    popupEl.querySelector('#anima_avatar_create_btn')?.addEventListener('click', () => initCreateWizard());
-    popupEl.querySelector('#anima_avatar_refresh_btn')?.addEventListener('click', () => void loadAvatarGrid());
-    popupEl.querySelector('#anima_avatar_logout_btn')?.addEventListener('click', () => doLogout());
-
-    // ── Create wizard ──
-    const uploadArea = popupEl.querySelector('#anima_upload_area');
-    const uploadInput = /** @type {HTMLInputElement|null} */ (popupEl.querySelector('#anima_upload_input'));
-    if (uploadArea && uploadInput) {
-        uploadArea.addEventListener('click', () => uploadInput.click());
-        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('is-dragover'); });
-        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('is-dragover'));
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('is-dragover');
-            const file = /** @type {DragEvent} */ (e).dataTransfer?.files?.[0];
-            if (file) void handlePhotoUpload(file);
-        });
-        uploadInput.addEventListener('change', () => {
-            const file = uploadInput.files?.[0];
-            if (file) void handlePhotoUpload(file);
-        });
-    }
-    popupEl.querySelector('#anima_step1_next')?.addEventListener('click', () => showCreateStep(2));
-    popupEl.querySelector('#anima_step2_prev')?.addEventListener('click', () => showCreateStep(1));
-    popupEl.querySelector('#anima_step2_next')?.addEventListener('click', () => {
-        if (!createWizardState) return;
-        const nameInput = /** @type {HTMLInputElement|null} */ (popupEl?.querySelector('#anima_create_name'));
-        createWizardState.name = nameInput?.value.trim() || '';
-        showCreateStep(3);
-    });
-    popupEl.querySelector('#anima_create_name')?.addEventListener('input', (e) => {
-        const btn = /** @type {HTMLButtonElement|null} */ (popupEl?.querySelector('#anima_step2_next'));
-        if (btn) btn.disabled = !/** @type {HTMLInputElement} */ (e.target).value.trim();
-    });
-    popupEl.querySelector('#anima_step3_prev')?.addEventListener('click', () => showCreateStep(2));
-    popupEl.querySelector('#anima_step3_skip')?.addEventListener('click', () => void submitCreateWizard());
-    popupEl.querySelector('#anima_step3_submit')?.addEventListener('click', () => void submitCreateWizard());
-
-    popupEl.querySelector('#anima_create_language')?.addEventListener('change', (e) => {
-        const lid = /** @type {HTMLSelectElement} */ (e.target).value;
-        if (createWizardState) createWizardState.languageId = lid;
-        void loadCreateVoices(lid);
-    });
-    popupEl.querySelector('#anima_create_voice')?.addEventListener('change', (e) => {
-        if (createWizardState) createWizardState.voiceId = /** @type {HTMLSelectElement} */ (e.target).value;
-    });
-
-    popupEl.querySelector('#anima_create_back_btn')?.addEventListener('click', async () => {
-        if (createWizardState?.avatarId) {
-            const discard = await cleanupDraftAvatar();
-            if (!discard) return;
-        }
-        createWizardState = null;
-        showView('avatars');
-    });
-
     // ── Runtime ──
     popupEl.querySelector('#anima_runtime_back_btn')?.addEventListener('click', () => {
         stopRuntimeSync();
         destroyRuntimeIframe();
-        showView('avatars');
-        void loadAvatarGrid();
+        runtimeCharacterId = null;
+        showCharacterView();
     });
     popupEl.querySelector('#anima_runtime_voice_btn')?.addEventListener('click', () => void openVoicePanel());
     popupEl.querySelector('#anima_voice_panel_close')?.addEventListener('click', closeVoicePanel);
@@ -2383,7 +2638,7 @@ function wireUpPopup() {
 
     // ── Settings view ──
     popupEl.querySelector('#anima_settings_back_btn')?.addEventListener('click', () => {
-        showView(previousView && previousView !== 'settings' ? previousView : 'avatars');
+        showView(previousView && previousView !== 'settings' ? previousView : 'character');
     });
     popupEl.querySelector('#anima_s_auto_lipsync')?.addEventListener('change', (e) => {
         const s = ensureSettings();
@@ -2396,6 +2651,16 @@ function wireUpPopup() {
         saveSettings();
         syncTtsInterceptState();
     });
+
+    // Reset account button
+    popupEl.querySelector('#anima_reset_account_btn')?.addEventListener('click', () => {
+        if (!confirm(t('settings.resetConfirm'))) return;
+        doLogout();
+        closePopup();
+    });
+
+    // Show current account info in settings
+    updateAccountInfo();
 }
 
 function savePopupPosition() {
@@ -2417,6 +2682,9 @@ function closePopup() {
     destroyRuntimeIframe();
     disableTtsIntercept();
     closeAllGenerationSSE();
+    runtimeCharacterId = null;
+    isCreatingAvatar = false;
+    creationError = '';
     if (popupEl) {
         savePopupPosition();
         popupEl.remove();

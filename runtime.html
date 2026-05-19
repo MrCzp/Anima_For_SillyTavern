@@ -735,7 +735,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
         </div>
         <div class="loading-mask" id="loading_mask">
             <div class="loading-spinner"></div>
-            <div class="loading-text">Loading avatar...</div>
+            <div class="loading-text">Video connecting...</div>
         </div>
         <!-- Speech bubble (Anima style) -->
         <div class="speech-bubble" id="speech_bubble">
@@ -1224,6 +1224,7 @@ function captureCameraFrame() {
     context.scale(-1, 1);
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+    const imageDataUrl = canvas.toDataURL('image/png');
     const text = $('chat_input').value.trim();
     $('chat_input').value = '';
 

@@ -650,6 +650,7 @@
 .anima-runtime__header-actions {
     display: flex;
     gap: 4px;
+    margin-left: auto;
 }
 .anima-runtime__body {
     flex: 1;
@@ -858,6 +859,25 @@
     font-size: 11px;
     color: var(--black50a, #888);
 }
+.anima-settings__row--separator {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.anima-settings__account-info {
+    font-size: 11px;
+    color: var(--black50a, #888);
+    margin-bottom: 8px;
+    word-break: break-all;
+}
+.anima-btn--danger {
+    background: rgba(239, 68, 68, 0.8);
+    border: none;
+    color: #fff;
+}
+.anima-btn--danger:hover {
+    background: rgba(220, 38, 38, 0.9);
+}
 
 /* ---------- Resize handle ---------- */
 .anima-panel__resize-handle {
@@ -930,6 +950,110 @@
 @keyframes anima-loading-bar {
     0% { transform: translateX(-130%); }
     100% { transform: translateX(260%); }
+}
+
+/* ---------- Character view ---------- */
+.anima-character__content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+}
+.anima-character__empty {
+    text-align: center;
+    color: var(--black50a, #888);
+    font-size: 13px;
+    padding: 32px 0;
+}
+.anima-character__card-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    width: 100%;
+    max-width: 400px;
+}
+.anima-character__single-card {
+    width: 100%;
+    cursor: default;
+}
+.anima-character__single-card .anima-avatar-card__img,
+.anima-character__single-card .anima-avatar-card__img-placeholder {
+    aspect-ratio: 3 / 4;
+}
+.anima-character__single-card .anima-avatar-card__info {
+    padding: 10px 12px;
+}
+.anima-character__single-card .anima-avatar-card__name {
+    font-size: 15px;
+}
+.anima-character__single-card:hover {
+    transform: none;
+    border-color: transparent;
+    box-shadow: none;
+}
+.anima-character__status {
+    font-size: 12px;
+    color: var(--black50a, #888);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+.anima-character__status--ready {
+    color: #34d399;
+}
+.anima-character__status--generating {
+    color: #facc15;
+}
+.anima-character__status--error {
+    color: #f87171;
+}
+.anima-btn--video-call,
+.anima-btn--create-avatar {
+    font-size: 14px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    gap: 8px;
+    width: 100%;
+}
+.anima-btn--video-call i,
+.anima-btn--create-avatar i {
+    font-size: 16px;
+}
+.anima-btn--create-avatar {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    border: none;
+}
+.anima-btn--create-avatar:hover {
+    filter: brightness(1.1);
+}
+.anima-btn--create-avatar:disabled,
+.anima-btn--video-call:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: none;
+}
+
+/* ---------- Connecting animation ---------- */
+.anima-connecting {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+.anima-connecting__spinner {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(255, 255, 255, 0.08);
+    border-top-color: rgba(255, 255, 255, 0.6);
+    animation: anima-spin 1.2s linear infinite;
+}
+.anima-connecting__text {
+    font-size: 13px;
+    color: var(--black50a, #999);
+    font-weight: 500;
 }
 
 /* ---------- Responsive ---------- */
