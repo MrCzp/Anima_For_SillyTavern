@@ -249,48 +249,220 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
     position: absolute;
     right: 12px;
     bottom: 12px;
-    width: 160px;
-    padding: 8px;
-    border-radius: 16px;
-    background: rgba(7, 10, 18, 0.72);
-    border: 1px solid rgba(255,255,255,0.08);
+    width: 172px;
+    padding: 10px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(18, 24, 38, 0.82), rgba(7, 10, 18, 0.74));
+    border: 1px solid rgba(255,255,255,0.1);
     backdrop-filter: blur(12px);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.28);
+    box-shadow: 0 16px 34px rgba(0,0,0,0.34);
     display: flex;
     flex-direction: column;
     gap: 8px;
     z-index: 11;
+    transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease;
 }
 .camera-panel.is-hidden {
     display: none;
 }
+.camera-panel.is-collapsed {
+    width: 48px;
+    min-width: 48px;
+    padding: 0;
+    gap: 0;
+    border: none;
+    background: transparent;
+    backdrop-filter: none;
+    box-shadow: none;
+}
+.camera-panel.is-collapsed .camera-panel-head {
+    gap: 0;
+    justify-content: flex-end;
+}
 .camera-panel.is-dragging {
     user-select: none;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.42);
+}
+.camera-panel-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 .camera-drag-handle {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    min-height: 24px;
-    padding: 0 4px;
+    gap: 10px;
+    flex: 1;
+    min-height: 30px;
+    padding: 0 2px;
     cursor: grab;
     color: rgba(255,255,255,0.88);
+}
+.camera-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.camera-title-badge {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 30% 30%, rgba(126, 231, 255, 0.34), rgba(43, 83, 255, 0.18));
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #eaf6ff;
+    flex-shrink: 0;
+}
+.camera-title-badge svg {
+    width: 12px;
+    height: 12px;
+}
+.camera-title-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.camera-title-label {
     font-size: 11px;
     font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.92);
+    line-height: 1.1;
+}
+.camera-title-meta {
+    font-size: 9px;
+    font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+    color: rgba(255,255,255,0.45);
+    line-height: 1.1;
 }
 .camera-drag-handle::after {
     content: '';
-    width: 24px;
+    width: 18px;
     height: 4px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.18);
-    box-shadow: 0 6px 0 rgba(255,255,255,0.12), 0 -6px 0 rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.14);
+    box-shadow: 0 6px 0 rgba(255,255,255,0.1), 0 -6px 0 rgba(255,255,255,0.1);
+    flex-shrink: 0;
 }
 .camera-panel.is-dragging .camera-drag-handle {
     cursor: grabbing;
+}
+.camera-panel.is-collapsed .camera-drag-handle {
+    display: none;
+}
+.camera-collapse-btn {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.9);
+    position: relative;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+.camera-collapse-btn:hover {
+    background: rgba(255,255,255,0.18);
+    border-color: rgba(255,255,255,0.14);
+    transform: translateY(-1px);
+}
+.camera-collapse-btn__icon {
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.camera-collapse-btn__icon svg {
+    width: 100%;
+    height: 100%;
+}
+.camera-collapse-btn__icon--launcher {
+    display: none;
+}
+.camera-panel.is-collapsed .camera-collapse-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(20, 31, 48, 0.96), rgba(10, 14, 24, 0.96));
+    border: 1px solid rgba(255,255,255,0.14);
+    box-shadow: 0 16px 30px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.08);
+    cursor: grab;
+}
+.camera-panel.is-collapsed .camera-collapse-btn:hover {
+    background: linear-gradient(180deg, rgba(27, 42, 64, 0.98), rgba(12, 18, 30, 0.98));
+}
+.camera-panel.is-collapsed.is-dragging .camera-collapse-btn {
+    cursor: grabbing;
+    box-shadow: 0 22px 36px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.camera-panel.is-collapsed.is-dragging {
+    box-shadow: none;
+}
+.camera-panel.is-collapsed .camera-collapse-btn::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(148,163,184,0.92);
+    box-shadow: 0 0 0 3px rgba(15,23,42,0.5);
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.camera-panel.is-collapsed.is-camera-live .camera-collapse-btn {
+    background: linear-gradient(180deg, rgba(45, 23, 28, 0.96), rgba(24, 12, 18, 0.96));
+    border-color: rgba(248,113,113,0.24);
+}
+.camera-panel.is-collapsed.is-camera-live .camera-collapse-btn:hover {
+    background: linear-gradient(180deg, rgba(59, 27, 34, 0.98), rgba(30, 14, 20, 0.98));
+}
+.camera-panel.is-collapsed.is-camera-live .camera-collapse-btn::after {
+    background: #f87171;
+    box-shadow: 0 0 0 3px rgba(127,29,29,0.35), 0 0 12px rgba(248,113,113,0.55);
+    animation: cameraLauncherPulse 1.6s ease-in-out infinite;
+}
+@keyframes cameraLauncherPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.18); }
+}
+.camera-panel.is-collapsed .camera-collapse-btn__icon--panel {
+    display: none;
+}
+.camera-panel.is-collapsed .camera-collapse-btn__icon--launcher {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+}
+.camera-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 240px;
+    opacity: 1;
+    overflow: hidden;
+    transition: max-height 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    transform-origin: top center;
+}
+.camera-panel.is-collapsed .camera-panel-body {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
 }
 .camera-preview-wrap {
     position: relative;
@@ -300,6 +472,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
     border-radius: 12px;
     background: rgba(0,0,0,0.45);
     border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
 .camera-preview {
     width: 100%;
@@ -575,14 +748,44 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; colo
             </div>
         </div>
         <div class="camera-panel" id="camera_panel">
-            <div class="camera-drag-handle" id="camera_drag_handle">Camera</div>
-            <div class="camera-preview-wrap">
-                <video id="camera_preview" class="camera-preview" autoplay playsinline muted></video>
-                <div class="camera-placeholder" id="camera_placeholder">Camera preview is off</div>
+            <div class="camera-panel-head">
+                <div class="camera-drag-handle" id="camera_drag_handle">
+                    <div class="camera-title">
+                        <span class="camera-title-badge" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M15 10l4.55-2.28A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.9L15 14" />
+                                <rect x="3" y="6" width="12" height="12" rx="3" ry="3" />
+                            </svg>
+                        </span>
+                        <span class="camera-title-text">
+                            <span class="camera-title-label">Camera</span>
+                            <span class="camera-title-meta" id="camera_title_meta">Drag panel</span>
+                        </span>
+                    </div>
+                </div>
+                <button class="camera-collapse-btn" id="camera_collapse_btn" type="button" title="Collapse camera panel" aria-expanded="true" aria-label="Collapse camera panel">
+                    <span class="camera-collapse-btn__icon camera-collapse-btn__icon--panel" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+                            <path d="M7 12h10" />
+                        </svg>
+                    </span>
+                    <span class="camera-collapse-btn__icon camera-collapse-btn__icon--launcher" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15 10l4.55-2.28A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.9L15 14" />
+                            <rect x="3" y="6" width="12" height="12" rx="3" ry="3" />
+                        </svg>
+                    </span>
+                </button>
             </div>
-            <div class="camera-controls">
-                <button class="camera-btn" id="camera_toggle_btn" type="button">Open</button>
-                <button class="camera-btn" id="camera_capture_btn" type="button" disabled>Capture</button>
+            <div class="camera-panel-body" id="camera_panel_body">
+                <div class="camera-preview-wrap">
+                    <video id="camera_preview" class="camera-preview" autoplay playsinline muted></video>
+                    <div class="camera-placeholder" id="camera_placeholder">Camera preview is off</div>
+                </div>
+                <div class="camera-controls">
+                    <button class="camera-btn" id="camera_toggle_btn" type="button">Open</button>
+                    <button class="camera-btn" id="camera_capture_btn" type="button" disabled>Capture</button>
+                </div>
             </div>
         </div>
         <!-- Interrupt button -->
@@ -682,6 +885,8 @@ let typewriterTimer = null;
 let cameraStream = null;
 let cameraStartPromise = null;
 let cameraPanelDrag = null;
+let isCameraPanelCollapsed = false;
+let suppressCameraCollapseClick = false;
 
 // Chat mode
 let chatMode = 'voice'; // 'text' | 'voice'
@@ -730,7 +935,108 @@ function setCameraPanelVisible(visible) {
     $('camera_panel').classList.toggle('is-hidden', !visible);
 }
 
+function hasManualCameraPanelPosition() {
+    const panel = $('camera_panel');
+    return Boolean(panel && panel.style.left !== '' && panel.style.top !== '');
+}
+
+function setCameraPanelPosition(left, top) {
+    const panel = $('camera_panel');
+    if (!panel) return;
+
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+}
+
+function clampCameraPanelCoords(left, top) {
+    const panel = $('camera_panel');
+    const area = $('character_area');
+    if (!panel || !area) {
+        return { left, top };
+    }
+
+    return {
+        left: Math.min(Math.max(0, left), Math.max(0, area.clientWidth - panel.offsetWidth)),
+        top: Math.min(Math.max(0, top), Math.max(0, area.clientHeight - panel.offsetHeight)),
+    };
+}
+
+function clampCameraPanelPosition() {
+    const panel = $('camera_panel');
+    const area = $('character_area');
+    if (!panel || !area || !hasManualCameraPanelPosition()) return;
+
+    const { left, top } = clampCameraPanelCoords(
+        Number.parseFloat(panel.style.left) || 0,
+        Number.parseFloat(panel.style.top) || 0,
+    );
+
+    setCameraPanelPosition(left, top);
+}
+
+function updateCameraPanelCollapsed(collapsed) {
+    isCameraPanelCollapsed = collapsed;
+    const panel = $('camera_panel');
+    const button = $('camera_collapse_btn');
+    const titleMeta = $('camera_title_meta');
+    const area = $('character_area');
+    if (!panel || !button) return;
+
+    // Before toggling, snapshot the panel's edges relative to area
+    let panelEdge = null;
+    if (area) {
+        const areaRect = area.getBoundingClientRect();
+        const panelRect = panel.getBoundingClientRect();
+        const leftInset = panelRect.left - areaRect.left;
+        const rightInset = areaRect.right - panelRect.right;
+        const topInset = panelRect.top - areaRect.top;
+        panelEdge = {
+            pinX: rightInset <= leftInset ? 'right' : 'left',
+            left: leftInset,
+            right: rightInset,
+            top: topInset,
+        };
+    }
+
+    // Disable transition so offsetWidth/offsetHeight return the final values
+    panel.style.transition = 'none';
+
+    panel.classList.toggle('is-collapsed', collapsed);
+    panel.classList.remove('is-dragging');
+    button.setAttribute('aria-expanded', String(!collapsed));
+    button.setAttribute('title', collapsed ? 'Expand camera panel' : 'Collapse camera panel');
+    button.setAttribute('aria-label', collapsed ? 'Expand camera panel' : 'Collapse camera panel');
+    if (titleMeta) {
+        titleMeta.textContent = collapsed ? 'Preview hidden' : 'Drag panel';
+    }
+
+    // Force reflow so the browser computes the new dimensions
+    void panel.offsetWidth;
+
+    // After toggling, reposition: pin horizontal edge, keep top stable
+    if (panelEdge && area) {
+        const newLeft = panelEdge.pinX === 'right'
+            ? area.clientWidth - panelEdge.right - panel.offsetWidth
+            : panelEdge.left;
+        const clamped = clampCameraPanelCoords(newLeft, panelEdge.top);
+        setCameraPanelPosition(clamped.left, clamped.top);
+    }
+
+    clampCameraPanelPosition();
+
+    // Re-enable transition on next frame
+    requestAnimationFrame(() => { panel.style.transition = ''; });
+}
+
+function toggleCameraPanelCollapsed() {
+    updateCameraPanelCollapsed(!isCameraPanelCollapsed);
+}
+
 function updateCameraUi(active) {
+    $('camera_panel').classList.toggle('is-camera-live', active);
+    $('camera_collapse_btn').classList.toggle('is-live', active);
     $('camera_preview').classList.toggle('is-visible', active);
     $('camera_placeholder').classList.toggle('is-hidden', active);
     $('camera_capture_btn').disabled = !active;
@@ -748,16 +1054,18 @@ function beginCameraPanelDrag(event) {
     const panelRect = panel.getBoundingClientRect();
     const areaRect = area.getBoundingClientRect();
     cameraPanelDrag = {
+        startX: event.clientX,
+        startY: event.clientY,
         offsetX: event.clientX - panelRect.left,
         offsetY: event.clientY - panelRect.top,
+        hasMoved: false,
+        startedCollapsed: isCameraPanelCollapsed,
     };
 
     panel.style.left = `${panelRect.left - areaRect.left}px`;
     panel.style.top = `${panelRect.top - areaRect.top}px`;
     panel.style.right = 'auto';
     panel.style.bottom = 'auto';
-    panel.classList.add('is-dragging');
-    event.preventDefault();
 }
 
 function dragCameraPanel(event) {
@@ -766,6 +1074,16 @@ function dragCameraPanel(event) {
     const panel = $('camera_panel');
     const area = $('character_area');
     if (!panel || !area) return;
+
+    if (!cameraPanelDrag.hasMoved) {
+        const deltaX = event.clientX - cameraPanelDrag.startX;
+        const deltaY = event.clientY - cameraPanelDrag.startY;
+        if (Math.hypot(deltaX, deltaY) < 6) {
+            return;
+        }
+        cameraPanelDrag.hasMoved = true;
+        panel.classList.add('is-dragging');
+    }
 
     const areaRect = area.getBoundingClientRect();
     const maxLeft = Math.max(0, area.clientWidth - panel.offsetWidth);
@@ -779,6 +1097,9 @@ function dragCameraPanel(event) {
 
 function endCameraPanelDrag() {
     if (!cameraPanelDrag) return;
+    if (cameraPanelDrag.hasMoved && cameraPanelDrag.startedCollapsed) {
+        suppressCameraCollapseClick = true;
+    }
     cameraPanelDrag = null;
     $('camera_panel')?.classList.remove('is-dragging');
 }
@@ -903,7 +1224,6 @@ function captureCameraFrame() {
     context.scale(-1, 1);
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const imageDataUrl = canvas.toDataURL('image/png');
     const text = $('chat_input').value.trim();
     $('chat_input').value = '';
 
@@ -1710,6 +2030,19 @@ $('mode_text_btn').addEventListener('click', () => setMode('text'));
 $('mode_voice_btn').addEventListener('click', () => setMode('voice'));
 $('camera_toggle_btn').addEventListener('click', () => { void toggleCameraStream(); });
 $('camera_capture_btn').addEventListener('click', () => captureCameraFrame());
+$('camera_collapse_btn').addEventListener('pointerdown', (event) => {
+    if (!isCameraPanelCollapsed) return;
+    beginCameraPanelDrag(event);
+});
+$('camera_collapse_btn').addEventListener('click', (event) => {
+    if (suppressCameraCollapseClick) {
+        suppressCameraCollapseClick = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+    }
+    toggleCameraPanelCollapsed();
+});
 $('camera_drag_handle').addEventListener('pointerdown', beginCameraPanelDrag);
 window.addEventListener('pointermove', dragCameraPanel);
 window.addEventListener('pointerup', endCameraPanelDrag);
